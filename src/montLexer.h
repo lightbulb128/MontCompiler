@@ -40,4 +40,7 @@ private:
     LexAutomatonNode* currentPtr;
 public:
     LexAutomaton();
+    static bool isAlphabet(char c); // underline is considered as an alphabet
+    static bool isNumber(char c);
+    static bool isSymbol(char c);
 };
