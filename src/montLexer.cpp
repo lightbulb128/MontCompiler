@@ -1,42 +1,35 @@
 #include <iostream>
 
-const int VALID_CHAR_RANGE = 128;
+#include "montLexer.h"
 
-enum TokenKind {
-    // identifier
-    TK_IDENTIFIER,
-    // primitive types
-    TK_INT, TK_CHAR,
-    // values
-    TK_INT_VALUE, TK_CHAR_VALUE,
-    // keywords
-    TK_RETURN
-};
+typedef LexAutomatonNode LNode;
+typedef LNode* LNodePtr;
 
-struct Token {
-    TokenKind tokenKind;
-    int value;
-    Token(TokenKind tokenKind, int value) : tokenKind(tokenKind), value(value) {}
-};
+Token::Token(TokenKind tokenKind, int value) : 
+    tokenKind(tokenKind), value(value) {}
 
-class LexAutomatonNode {
-public:
-    LexAutomatonNode* children[VALID_CHAR_RANGE];
-    Token* token;
-    LexAutomatonNode(){for (int i=0;i<VALID_CHAR_RANGE;i++) children[i]=nullptr; token=nullptr;}
-    
-};
+LNode::LexAutomatonNode() {
+    for (int i=0;i<VALID_CHAR_RANGE;i++) children[i]=nullptr; 
+    tokenKind = TK_UNDEFINED;
+}
 
-/*
-    Use a trie structure to detect keywords
-    Constant value and identifier detection are done manually (brute-force)
-*/
-class LexAutomaton { 
-private:
-    LexAutomatonNode* root;
-public:
-};
+LNodePtr LNode::getNode(const char* path) {
+    if (path[0]==0) return this;
+    if (children[path[0]] == nullptr) 
+        children[path[0]] = new LexAutomatonNode(); 
+    return children[path[0]]->getNode(path+1);
+}
 
-int main(){
-    
+LNodePtr LNode::createNode(const char* path, const TokenKind token) {
+    LNodePtr ptr = getNode(path);
+    ptr->tokenKind = token;
+    return ptr;
+}
+
+LNode::~LexAutomatonNode() {
+    for (int i=0;i<VALID_CHAR_RANGE;i++) 
+        if (children[i]!=nullptr) {
+            delete children[i];
+            children[i] = nullptr;
+        }
 }
