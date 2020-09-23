@@ -103,6 +103,10 @@ LexAutomaton::TransferResult LexAutomaton::transfer(char c, char peek){
                 currentToken = Token(TK_RBRACE); return TR_FINISHED; break;
             case ';':
                 currentToken = Token(TK_SEMICOLON); return TR_FINISHED; break;  
+            case '=':
+                if (peek=='=') {
+                    currentToken = Token(TK_EQUAL); return TR_PEEKUSED; break;
+                }
         }
     }
 }
