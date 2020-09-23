@@ -30,6 +30,9 @@ int mainParser(){
     if (f) {
         cout << parser;
     } else {
+        cout << "Lexer message: " << endl;
+        cout << lexer.getErrorInfo();
+        cout << "Parser message: " << endl;
         cout << parser.getErrorMessage();
         while (lexer.peek().tokenKind!=TK_EOF) {
             cout<<lexer.nextToken();

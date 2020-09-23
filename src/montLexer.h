@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <stack>
+#include "montLog.h"
 
 using std::string;
 using std::stack;
@@ -65,6 +66,7 @@ public:
 */
 class MontLexer {
 private:
+    static MontLog logger;
     LexAutomatonNode* root;
     LexAutomatonNode* currentPtr;
     Token currentToken;
@@ -79,7 +81,7 @@ private:
     string currentIdentifier;
     int currentLength;
     std::ifstream stream;
-    string errorInfo;
+    //string errorInfo;
     stack<Token> buffer;
     int currentRow, currentColumn;
     char lastChar;
@@ -93,6 +95,11 @@ private:
     };
     TransferResult transfer(char c, char peek);
     void reset();
+    void appendErrorInfo(string str) {
+        logger.log("(" + std::to_string(currentRow) + ":" + 
+            std::to_string(currentColumn) + ") " 
+            + str); 
+    }
 public:
     MontLexer(bool addDefaultKeyword);
     ~MontLexer();
@@ -106,7 +113,7 @@ public:
     void addKeyword(const char* keyword, TokenKind tk);
     void addDefaultKeywords();
     Token nextToken();
-    string getErrorInfo(){return errorInfo;}
+    string getErrorInfo(){return logger.get();}
     void putback(Token token);
     Token peek();
     char getChar(){

@@ -1,5 +1,4 @@
 int main(){
-    int a;  
-    char p;  
-    return a; 
+    return 12a;
+    return 0;
 }

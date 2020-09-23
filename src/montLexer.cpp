@@ -9,11 +9,13 @@ typedef LNode* LNodePtr;
 using std::cout;
 using std::endl;
 
-const bool showRowLine = true;
+const bool SHOW_ROW_LINE = true;
+
+MontLog MontLexer::logger = MontLog();
 
 std::ostream& operator <<(std::ostream& stream, const Token& t){
     stream << "[";
-    if (showRowLine) stream<<t.row<<":"<<t.column<<" ";
+    if (SHOW_ROW_LINE) stream<<t.row<<":"<<t.column<<" ";
     switch (t.tokenKind) {
         case TK_IDENTIFIER: stream << "Identifier: " << t.identifier; break;
         case TK_INT_VALUE: stream << "Integer Value: " << t.value; break;
@@ -135,7 +137,6 @@ void MontLexer::reset(){
     isValueCharEscape = false;
     isValueHex = false;
     currentLength = 0;
-    errorInfo = "";
 }
 
 // If function transfer are run the first time after reset(),
@@ -217,19 +218,19 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
             if (!isValueChar) { // 1234, 0x1234
                 if (!isValueHex) { 
                     if (isSpace(c) || isSymbol(c)) {currentToken = Token(TK_INT_VALUE, currentValue); return TR_PUTBACK;}
-                    else if (c=='f') {errorInfo = "Value Error: Float value unsupported."; return TR_ERROR;}
-                    else if (c=='.') {errorInfo = "Value Error: Float value unsupported."; return TR_ERROR;}
-                    else if (!isNumber(c)) {errorInfo = "Value Error: Illegal decimal integer value."; return TR_ERROR;}
+                    else if (c=='f') {appendErrorInfo("Value Error: Float value unsupported."); return TR_ERROR;}
+                    else if (c=='.') {appendErrorInfo("Value Error: Float value unsupported."); return TR_ERROR;}
+                    else if (!isNumber(c)) {appendErrorInfo("Value Error: Illegal decimal integer value."); return TR_ERROR;}
                     currentValue = currentValue * 10 + c - 48; 
                 } else { 
                     if (isSpace(c) || isSymbol(c)) {currentToken = Token(TK_INT_VALUE, currentValue); return TR_PUTBACK;}
-                    else if (!isNumber(c) && !(c>='A' && c<='F') && (!c>='a'  && c<='f')) {errorInfo = "Value: Illegal hexadecimal value."; return TR_ERROR;}
+                    else if (!isNumber(c) && !(c>='A' && c<='F') && (!c>='a'  && c<='f')) {appendErrorInfo("Value: Illegal hexadecimal value."); return TR_ERROR;}
                     currentValue = currentValue * 16 + ((c<='9') ? (c-48) : ((c<='F') ? (c-'A'+10) : (c-'a'+10))); 
                 }
             } else { // 'c', '\n', '\123', '\x123456'
                 if (currentLength == 1) {
                     if (peek == '\'') {currentToken = Token(TK_CHAR_VALUE, c); return TR_PEEKUSED_FINISHED;}
-                    else {errorInfo = "Value Error: Illegal char value, too long."; return TR_ERROR;}
+                    else {appendErrorInfo("Value Error: Illegal char value, too long."); return TR_ERROR;}
                 } else if (currentLength == 2 && isValueCharEscape) { 
                     switch (c) {
                         case 'n' : currentValue = '\n'; break;
@@ -240,23 +241,23 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                         case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
                             currentValue = c - 48; break;
                         default:
-                            errorInfo = "Value Error: Illegan escape char."; return TR_ERROR; break;
+                            appendErrorInfo("Value Error: Illegan escape char."); return TR_ERROR; break;
                     }
                 } else if (currentLength == 2 && !isValueCharEscape) {
-                    if (c!='\'') {errorInfo = "Value Error: Illegal char value, too long."; return TR_ERROR;}
+                    if (c!='\'') {appendErrorInfo("Value Error: Illegal char value, too long."); return TR_ERROR;}
                     else {currentToken = Token(TK_CHAR_VALUE, currentValue); return TR_FINISHED;}
                 } else if (currentLength > 2) {
-                    if (!isValueCharEscape) {errorInfo = "Value Error: Illegal char value, too long."; return TR_ERROR;}
+                    if (!isValueCharEscape) {appendErrorInfo("Value Error: Illegal char value, too long."); return TR_ERROR;}
                     else if (c=='\'') {
                         if (currentLength == 3) {currentToken = Token(TK_CHAR_VALUE, currentValue); return TR_FINISHED;}
                         else if (isValueHex) {currentToken = Token(TK_CHAR_VALUE, currentValue); return TR_FINISHED;}
-                        else if (currentLength != 5) {errorInfo = "Value Error: Illegal octal char value."; return TR_ERROR;}
+                        else if (currentLength != 5) {appendErrorInfo("Value Error: Illegal octal char value."); return TR_ERROR;}
                         else {currentToken = Token(TK_CHAR_VALUE, currentValue); return TR_FINISHED;}
                     } else if (isValueHex) {
-                        if (!isNumber(c) && !(c>='A' && c<='F') && (!c>='a'  && c<='f')) {errorInfo = "Value: Illegal hexadecimal char value."; return TR_ERROR;}
+                        if (!isNumber(c) && !(c>='A' && c<='F') && (!c>='a'  && c<='f')) {appendErrorInfo("Value: Illegal hexadecimal char value."); return TR_ERROR;}
                         currentValue = currentValue * 16 + ((c<='9') ? (c-48) : ((c<='F') ? (c-'A'+10) : (c-'a'+10))); 
                     } else {
-                        if (c<'0' || c>'7') {errorInfo = "Value: Illegal octal char value."; return TR_ERROR;}
+                        if (c<'0' || c>'7') {appendErrorInfo("Value: Illegal octal char value."); return TR_ERROR;}
                         currentValue = currentValue * 8 + c - 48;
                     }
                 }

@@ -10,9 +10,11 @@ using std::endl;
 using std::cout;
 
 const bool DEBUG = false;
+const bool SHOW_ROW_LINE = true;
+
+MontLog MontNode::logger = MontLog();
 
 typedef MontNodePtr Mnp; 
-string MontNode::errorInfo = "";
 
 MontNode::~MontNode(){
     for (int i=0;i<children.size();i++) 
@@ -34,6 +36,7 @@ void MontTokenNode::putback(MontLexer& lexer) {
 }
 
 void MontNode::addChildren(Mnp p){
+    if (children.size()==0) {row=p->row; column=p->column;}
     children.push_back(p);
 }
 
@@ -192,6 +195,7 @@ void MontNode::output(int tabcount, ostream& out) {
         out << (*n).getToken() << endl;
         return;
     }
+    out << "(" << row << ":" << column << ") ";
     switch (kind) {
         case NK_ROOT:       out << "root"; break;
         case NK_PROGRAM:    out << "program"; break;

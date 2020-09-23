@@ -17,6 +17,7 @@ value       :   CharValue | IntValue
 #include <string>
 #include <iostream>
 #include "montLexer.h"
+#include "montLog.h"
 
 using std::vector;
 using std::string;
@@ -49,7 +50,9 @@ protected:
     MontNodeKind kind;
     MontNodeExpansion expansion;
     vector<MontNodePtr> children;
-    static string errorInfo;
+    static MontLog logger;
+    // static string errorInfo;
+    int row, column;
 public:
     MontNode(){children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;}
     MontNodeKind getKind(){return kind;}
@@ -57,12 +60,12 @@ public:
     virtual ~MontNode();
     virtual void putback(MontLexer& lexer);
     static bool appendErrorInfo(string str, int row, int column){
-        errorInfo += "(" + std::to_string(row) + ":" + std::to_string(column) + ") " 
-            + str + "\n"; 
+        logger.log("(" + std::to_string(row) + ":" + std::to_string(column) + ") " 
+            + str); 
         return false;
     }
-    static string getErrorInfo(){return errorInfo;}
-    static void resetErrorInfo(){errorInfo = "";}
+    static string getErrorInfo(){return logger.get();}
+    static void resetErrorInfo(){logger.clear();}
     void addChildren(MontNodePtr ptr); 
     bool tryParse(MontLexer& lexer, TokenKind tk);
     bool isValueToken(Token& t);
@@ -83,7 +86,10 @@ private:
     TokenKind requirement;
     Token token;
 public:
-    MontTokenNode(Token tk){requirement = tk.tokenKind; token = tk; kind = NK_TOKEN;}
+    MontTokenNode(Token tk){
+        requirement = tk.tokenKind; token = tk; kind = NK_TOKEN;
+        row = tk.row; column = tk.column;
+    }
     void putback(MontLexer& lexer) override;
     Token getToken(){return token;}
 };
