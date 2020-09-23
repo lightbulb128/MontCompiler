@@ -95,4 +95,5 @@ public:
     void addKeyword(const char* keyword, TokenKind tk);
     void addDefaultKeywords();
     Token nextToken();
+    string getErrorInfo(){return errorInfo;}
 };

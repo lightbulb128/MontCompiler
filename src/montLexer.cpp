@@ -32,8 +32,8 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_COLON: stream << "Colon ,"; break;
         case TK_GREATER: stream << "Greater >"; break; 
         case TK_LESS: stream << "Less <"; break;
-        case TK_GREATER_EQUAL: stream << "Greater or equal <="; break;
-        case TK_LESS_EQUAL: stream << "Less or equal >="; break;
+        case TK_GREATER_EQUAL: stream << "Greater or equal >="; break;
+        case TK_LESS_EQUAL: stream << "Less or equal <="; break;
         case TK_RIGHT_SHIFT: stream << "Right shift >>"; break;
         case TK_LEFT_SHIFT: stream << "Left shift <<"; break;
         case TK_EQUAL: stream << "Equal =="; break;
@@ -283,6 +283,8 @@ Token MontLexer::nextToken(){
                 stream.putback(c); return currentToken; break;
             case TR_CONTINUE:
                 currentLength++; break;
+            case TR_ERROR:
+                return Token(TK_ERROR); break;
         }
         c = stream.get(); peek = stream.peek();
     }

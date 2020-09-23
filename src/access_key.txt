@@ -1,2 +1,3 @@
+ssh -T git@git.tsinghua.edu.cn
 lxq18
 ypoosBiu2os32wJX256g
