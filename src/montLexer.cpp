@@ -9,8 +9,11 @@ typedef LNode* LNodePtr;
 using std::cout;
 using std::endl;
 
+const bool showRowLine = true;
+
 std::ostream& operator <<(std::ostream& stream, const Token& t){
     stream << "[";
+    if (showRowLine) stream<<t.row<<":"<<t.column<<" ";
     switch (t.tokenKind) {
         case TK_IDENTIFIER: stream << "Identifier: " << t.identifier; break;
         case TK_INT_VALUE: stream << "Integer Value: " << t.value; break;
@@ -84,6 +87,10 @@ MontLexer::MontLexer(bool addDefaultKeyword) {
     if (addDefaultKeyword) addDefaultKeywords();
 }
 
+MontLexer::~MontLexer(){
+    delete root;
+}
+
 bool MontLexer::isAlphabet(char c) { 
     return (c>='a' && c<='z') || (c>='A' && c<='Z') || (c=='_');
 }
@@ -108,6 +115,7 @@ bool MontLexer::isSpace(char c){
 
 void MontLexer::openStream(const char* filename) {
     stream.open(filename);
+    currentRow = 1; currentColumn = 0; lastChar = ' ';
 }
 
 void MontLexer::closeStream(){
@@ -259,34 +267,42 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
 }
 
 Token MontLexer::nextToken(){
+    if (!buffer.empty()) {Token ret = buffer.top(); buffer.pop(); return ret;}
     reset();
     char c;
     while (true) { // get rid of spaces
-        if (stream.eof()) return Token(TK_EOF);
-        c = stream.get();
+        if (stream.eof()) {
+            Token ret = Token(TK_EOF);
+            ret.setRC(currentRow+1, currentColumn);
+            return ret;
+        }
+        c = getChar();
         if (!isSpace(c)) break;
     }
+    int cr = currentRow, cc = currentColumn;
     char peek = stream.peek();
     while (true) {
         TransferResult result = transfer(c, peek);
         switch (result) {
             case TR_FINISHED: 
-                currentLength++; 
+                currentLength++; currentToken.setRC(cr,cc);
                 return currentToken; break;
             case TR_PEEKUSED_FINISHED: 
-                currentLength+=2;
-                stream.get(); return currentToken; break;
+                currentLength+=2; getChar(); currentToken.setRC(cr,cc);
+                return currentToken; break;
             case TR_PEEKUSED_CONTINUE:
                 currentLength+=2; 
-                stream.get(); break;
+                getChar(); break;
             case TR_PUTBACK: 
-                stream.putback(c); return currentToken; break;
+                putbackChar(c); currentToken.setRC(cr,cc);
+                return currentToken; break;
             case TR_CONTINUE:
                 currentLength++; break;
             case TR_ERROR:
-                return Token(TK_ERROR); break;
+                Token ret = Token(TK_ERROR); ret.setRC(cr, cc);
+                return ret; break;
         }
-        c = stream.get(); peek = stream.peek();
+        c = getChar(); peek = stream.peek();
     }
 }
 
@@ -299,4 +315,14 @@ void MontLexer::addDefaultKeywords(){
     addKeyword("char", TK_CHAR);
     addKeyword("int", TK_INT);
     addKeyword("return", TK_RETURN);
+}
+
+void MontLexer::putback(Token token) {
+    buffer.push(token);
+}
+
+Token MontLexer::peek(){
+    Token next = nextToken();
+    putback(next);
+    return next;
 }

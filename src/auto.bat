@@ -1,2 +1,2 @@
-g++ montLexer.cpp test.cpp -o test
+g++ montLexer.cpp montParser.cpp test.cpp -o test
 test

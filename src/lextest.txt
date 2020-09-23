@@ -1,15 +1,5 @@
 int main(){
-    int a, c, e;
-    char b, d;
-    int lident, long_ident, something, sth123, _und;
-    a = 12;
-    b = 'c';
-    c = 0x40;
-    a = 12;
-    d = '\n';
-    e = '\x41';
-    a <= 12;
-    t == 36;
-    p << r;
-    return 0;
+    int a;  
+    char p;  
+    return a; 
 }

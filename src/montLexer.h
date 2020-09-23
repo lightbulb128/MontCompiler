@@ -1,10 +1,15 @@
+#ifndef MONTLEXER_H
+#define MONTLEXER_H
+
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <stack>
 
 using std::string;
+using std::stack;
 
-const int   VALID_CHAR_RANGE = 26;
+const int   VALID_CHAR_RANGE  = 26;
 const int   VALID_CHAR_OFFSET = 97;
 // const char* VALID_SYMBOLS    = "~!%^&*()-=+[]{}\\|;:<>,./?";
 const char * const VALID_SYMBOLS = "(){};><=,"; // quote should not be treated as a symbol
@@ -33,9 +38,11 @@ struct Token{
     TokenKind tokenKind;
     int value;
     string identifier;
+    int row, column;
     Token(TokenKind tokenKind, int value=0):tokenKind(tokenKind), value(value){identifier="";}
     Token(){tokenKind=TK_UNDEFINED; value=0; identifier="";}
     Token(string identifier):identifier(identifier), tokenKind(TK_IDENTIFIER), value(0){}
+    void setRC(int r, int c){row=r;column=c;}
     friend std::ostream& operator <<(std::ostream& stream, const Token& t);
 };
 
@@ -73,6 +80,9 @@ private:
     int currentLength;
     std::ifstream stream;
     string errorInfo;
+    stack<Token> buffer;
+    int currentRow, currentColumn;
+    char lastChar;
     enum TransferResult{
         TR_CONTINUE,
         TR_FINISHED,
@@ -85,6 +95,7 @@ private:
     void reset();
 public:
     MontLexer(bool addDefaultKeyword);
+    ~MontLexer();
     static bool isAlphabet(char c); // underline is considered as an alphabet
     static bool isNumber(char c);
     static bool isSymbol(char c);
@@ -96,4 +107,22 @@ public:
     void addDefaultKeywords();
     Token nextToken();
     string getErrorInfo(){return errorInfo;}
+    void putback(Token token);
+    Token peek();
+    char getChar(){
+        if (lastChar == '\n' || lastChar == EOF) {currentRow++; currentColumn=1;}
+        else {currentColumn++;}
+        // std::cout<<"getchar: "<<currentRow<<":"<<currentColumn<<std::endl;
+        lastChar = stream.get();
+        return lastChar;
+    }
+    void putbackChar(char c){
+        currentColumn--;
+        lastChar = ' ';
+        stream.putback(c);
+    }
+    int getCurrentRow(){return currentRow;}
+    int getCurrentColumn(){return currentColumn;}
 };
+
+#endif
