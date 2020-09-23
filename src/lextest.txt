@@ -1,0 +1,11 @@
+int main(){
+    int a, c, e;
+    char b, d;
+    int lident, long_ident, something, sth123, _und;
+    a = 12;
+    b = 'c';
+    c = 0x40;
+    d = '\n';
+    e = '\x41';
+    return 0;
+}
