@@ -139,8 +139,9 @@ void MontLexer::reset(){
 // If function transfer are run the first time after reset(),
 // the stream must have skipped all the spaces.
 MontLexer::TransferResult MontLexer::transfer(char c, char peek){
-    //cout << endl << "c=" << c << " p=" << peek << " len=" << currentLength << " iskv" << 
-    //    flagIdentifier << flagSymbol << flagKeyword << flagValue << endl;
+    if (!flagSymbol && !flagKeyword && !flagIdentifier && !flagValue) {
+        appendErrorInfo("Token: Unknown token."); return TR_ERROR;
+    }
     if (flagSymbol) { 
         switch (c) {
             case '(': 
