@@ -81,7 +81,7 @@ private:
     bool isValueCharEscape;
     string currentIdentifier;
     int currentLength;
-    std::ifstream stream;
+    std::istream* stream;
     //string errorInfo;
     stack<Token> buffer;
     int currentRow, currentColumn;
@@ -109,8 +109,7 @@ public:
     static bool isSymbol(char c);
     static bool isLowercase(char c);
     static bool isSpace(char c);
-    void openStream(const char* filename);
-    void closeStream();
+    void setStream(std::istream* input);
     void addKeyword(const char* keyword, TokenKind tk);
     void addDefaultKeywords();
     Token nextToken();
@@ -122,13 +121,13 @@ public:
         if (lastChar == '\n' || lastChar == EOF) {currentRow++; currentColumn=1;}
         else {currentColumn++;}
         // std::cout<<"getchar: "<<currentRow<<":"<<currentColumn<<std::endl;
-        lastChar = stream.get();
+        lastChar = stream->get();
         return lastChar;
     }
     void putbackChar(char c){
         currentColumn--;
         lastChar = ' ';
-        stream.putback(c);
+        stream->putback(c);
     }
     int getCurrentRow(){
         if (!buffer.empty()) return buffer.top().row;

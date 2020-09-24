@@ -8,6 +8,7 @@ typedef LNode* LNodePtr;
 
 using std::cout;
 using std::endl;
+using std::istream;
 
 const bool SHOW_ROW_LINE = true;
 
@@ -115,13 +116,9 @@ bool MontLexer::isSpace(char c){
     return (c=='\n') || (c=='\r') || (c=='\t') || (c==' ') || (c==EOF);
 }
 
-void MontLexer::openStream(const char* filename) {
-    stream.open(filename);
+void MontLexer::setStream(istream* input) {
+    stream = input;
     currentRow = 1; currentColumn = 0; lastChar = ' ';
-}
-
-void MontLexer::closeStream(){
-    stream.close();
 }
 
 void MontLexer::reset(){
@@ -278,7 +275,7 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
 void MontLexer::killSpaces(){ 
     char c;
     while (true) { // get rid of spaces
-        if (stream.eof()) return;
+        if (stream->eof()) return;
         c = getChar();
         if (!isSpace(c)) break;
     }
@@ -295,7 +292,7 @@ Token MontLexer::nextToken(){
         return ret;
     }
     int cr = currentRow, cc = currentColumn;
-    char peek = stream.peek();
+    char peek = stream->peek();
     while (true) {
         TransferResult result = transfer(c, peek);
         switch (result) {
@@ -317,7 +314,7 @@ Token MontLexer::nextToken(){
                 Token ret = Token(TK_ERROR); ret.setRC(cr, cc);
                 return ret; break;
         }
-        c = getChar(); peek = stream.peek();
+        c = getChar(); peek = stream->peek();
     }
 }
 

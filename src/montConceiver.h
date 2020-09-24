@@ -12,6 +12,8 @@ using std::to_string;
 
 #include <iostream>
 
+class MontAssembler;
+
 enum IntermediateType {
     IR_PUSH,
     IR_RET
@@ -28,7 +30,7 @@ public:
     static MontIntermediate simple(IntermediateType type){return MontIntermediate(type);}
     static MontIntermediate intcode(IntermediateType type, int num){return MontIntermediate(type,num);}
     static MontIntermediate strcode(IntermediateType type, string str){return MontIntermediate(type,0,str);}
-    string toAssembly() {return "";}
+    string toAssembly();
     string toString();
     friend std::ostream& operator <<(std::ostream& stream, MontIntermediate ir);
 };
@@ -36,6 +38,7 @@ public:
 // Convert AST to IR. Basically a stack machine.
 class MontConceiver {
 private:
+    friend class MontAssembler;
     vector<MontIntermediate> irs;
     static MontLog logger;
     static bool appendErrorInfo(string str, int row, int column) {
