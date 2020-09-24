@@ -7,9 +7,9 @@
 #include <list>
 using namespace std;
 
-int compile(){
+int compile(const char* filename){
     MontLexer lexer(true);
-    ifstream fileReader("lextest.txt");
+    ifstream fileReader(filename);
     lexer.setStream(&fileReader);
     MontParser parser;
     bool f = parser.parse(lexer);
@@ -35,15 +35,13 @@ int compile(){
         return 0;
     }
     MontAssembler assembler;
-    ofstream fileWriter("output.txt");
-    assembler.setStream(&fileWriter);
+    assembler.setStream(&cout);
     assembler.assemble(conceiver);
-    fileWriter.close();
     cout << "Assembled." << endl;
     return 0;
 }
 
-int main(){
-    compile();
+int main(int argc, const char* argv[]){
+    compile(argv[0]);
     return 0;
 }
