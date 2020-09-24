@@ -4,4 +4,4 @@ apt update
 apt install -y cmake g++
 mkdir build
 cd src
-g++ montLexer.cpp montParser.cpp montConceiver.cpp montAssembler.cpp -o ../build/MiniDecaf
+g++ montLexer.cpp montParser.cpp montConceiver.cpp montAssembler.cpp montCompiler.cpp -o ../build/MiniDecaf

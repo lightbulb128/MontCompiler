@@ -7,7 +7,7 @@
 #include <list>
 using namespace std;
 
-int compile(const char* filename){
+bool compile(const char* filename){
     MontLexer lexer(true);
     ifstream fileReader(filename);
     lexer.setStream(&fileReader);
@@ -15,33 +15,26 @@ int compile(const char* filename){
     bool f = parser.parse(lexer);
     fileReader.close();
     if (!f) {
-        cout << "Lexer message: " << endl;
-        cout << lexer.getErrorInfo();
-        cout << "Parser message: " << endl;
-        cout << parser.getErrorInfo();
-        while (lexer.peek().tokenKind!=TK_EOF) {
-            cout<<lexer.nextToken();
-        }
-        return 0;
+        cerr << "Lexer message: " << endl;
+        cerr << lexer.getErrorInfo();
+        cerr << "Parser message: " << endl;
+        cerr << parser.getErrorInfo();
+        return false;
     }
     MontConceiver conceiver; 
     f = conceiver.conceive(parser);
-    if (f) {
-        cout << "Intermediate representation:" << endl;
-        cout << conceiver; 
-    } else {
-        cout << "Conceiver message: " << endl;
-        cout << conceiver.getErrorInfo();
-        return 0;
+    if (!f) {
+        cerr << "Conceiver message: " << endl;
+        cerr << conceiver.getErrorInfo();
+        return false;
     }
     MontAssembler assembler;
     assembler.setStream(&cout);
     assembler.assemble(conceiver);
-    cout << "Assembled." << endl;
-    return 0;
+    return true;
 }
 
 int main(int argc, const char* argv[]){
-    compile(argv[0]);
+    compile(argv[1]);
     return 0;
 }
