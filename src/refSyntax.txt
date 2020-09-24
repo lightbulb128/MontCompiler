@@ -1,0 +1,9 @@
+program     :   function EOF
+function    :   type Identifier LParen RParen codeblock
+codeblock   :   LBrace (statement)* RBrace
+statement   :   type Identifier Semicolon
+            |   expression Semicolon
+            |   Return expression Semicolon
+type        :   Integer | Char
+expression  :   value
+value       :   CharValue | IntValue

@@ -2,7 +2,7 @@
 #include <string>
 #include <iostream>
 
-#define GETRC lexer.getCurrentRow(), lexer.getCurrentColumn()
+#define PARSEFAIL(str) {ptr->putback(lexer); appendErrorInfo(str, ptr->row, ptr->column); delete ptr; return false;}
 
 using std::string;
 using std::ostream;
@@ -12,7 +12,7 @@ using std::cout;
 const bool DEBUG = false;
 const bool SHOW_ROW_LINE = true;
 
-MontLog MontNode::logger = MontLog();
+MontLog MontParser::logger = MontLog();
 
 typedef MontNodePtr Mnp; 
 
@@ -31,12 +31,16 @@ void MontNode::putback(MontLexer& lexer){
     children.clear();
 }
 
+bool MontNode::appendErrorInfo(string str, int row, int column){
+    return MontParser::appendErrorInfo(str, row, column);
+}
+
 void MontTokenNode::putback(MontLexer& lexer) {
     lexer.putback(token);
 }
 
 void MontNode::addChildren(Mnp p){
-    if (children.size()==0) {row=p->row; column=p->column;}
+    // if (children.size()==0) {row=p->row; column=p->column;}
     children.push_back(p);
 }
 
@@ -58,13 +62,10 @@ bool MontNode::isValueToken(Token& token){
 
 bool MontNode::tryParseValue(MontLexer& lexer) {
     if (DEBUG) cout << "try parse value " << lexer.peek() << endl;
-    Mnp ptr = new MontNode(); ptr->kind = NK_VALUE;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_VALUE;
     Token token = lexer.peek();
     if (isValueToken(token)) ptr->tryParse(lexer, token.tokenKind);
-    else {
-        ptr->putback(lexer); delete ptr;
-        return appendErrorInfo("Value: Expect value token.", GETRC);
-    }
+    else PARSEFAIL("Value: Expect value token.");
     if (DEBUG) cout << "ok parsed value" << endl;
     addChildren(ptr); return true;
 }
@@ -72,11 +73,8 @@ bool MontNode::tryParseValue(MontLexer& lexer) {
 bool MontNode::tryParseExpression(MontLexer& lexer) {
     if (DEBUG) cout << "try parse expression " << lexer.peek() << endl;
     Token token = lexer.peek();
-    Mnp ptr = new MontNode(); ptr->kind = NK_EXPRESSION;
-    if (!ptr->tryParseValue(lexer)) {
-        ptr->putback(lexer); delete ptr;
-        return appendErrorInfo("Expression: Not valid expression.", GETRC);
-    } 
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_EXPRESSION;
+    if (!ptr->tryParseValue(lexer)) PARSEFAIL("Expression: Not valid expression.");
     if (DEBUG) cout << "ok parsed expression" << endl;
     addChildren(ptr); return true;
 }
@@ -88,13 +86,10 @@ bool MontNode::isTypeToken(Token& token){
 
 bool MontNode::tryParseType(MontLexer& lexer) {
     if (DEBUG) cout << "try parse type " << lexer.peek() << endl;
-    Mnp ptr = new MontNode(); ptr->kind = NK_TYPE;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_TYPE;
     Token token = lexer.peek();
     if (isTypeToken(token)) ptr->tryParse(lexer, token.tokenKind);
-    else {
-        ptr->putback(lexer); delete ptr; 
-        return appendErrorInfo("Type: Expect type name.", GETRC);
-    }
+    else PARSEFAIL("Type: Expect type name.");
     if (DEBUG) cout << "ok parsed type" << endl;
     addChildren(ptr); return true;
 }
@@ -102,29 +97,23 @@ bool MontNode::tryParseType(MontLexer& lexer) {
 bool MontNode::tryParseStatement(MontLexer& lexer) {
     if (DEBUG) cout << "try parse statement " << lexer.peek() << endl;
     Token peek = lexer.peek();
-    Mnp ptr = new MontNode(); ptr->kind = NK_STATEMENT;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_STATEMENT;
     if (isTypeToken(peek)) {
         ptr->expansion = NE_STATEMENT_VARDEFINE;
-        if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER) || !ptr->tryParse(lexer, TK_SEMICOLON)) {
-            ptr->putback(lexer); delete ptr;
-            return appendErrorInfo("Statement: Illegal variable definition.", GETRC);
-        } 
+        if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER) || !ptr->tryParse(lexer, TK_SEMICOLON))
+            PARSEFAIL("Statement: Illegal variable definition.");
         if (DEBUG) cout << "ok parsed statement vardefine" << endl;
         addChildren(ptr); return true;
     } else if (peek.tokenKind == TK_RETURN) {
         ptr->tryParse(lexer, TK_RETURN); ptr->expansion = NE_STATEMENT_RETURN;
-        if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) {
-            ptr->putback(lexer); delete ptr;
-            return appendErrorInfo("Statement: Illegal return statement.", GETRC);
-        } 
+        if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
+            PARSEFAIL("Statement: Illegal return statement.");
         if (DEBUG) cout << "ok parsed return statement" << endl;
         addChildren(ptr); return true;
     } else {
         ptr->expansion = NE_STATEMENT_EXPRESSION;
-        if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) {
-            ptr->putback(lexer); delete ptr;
-            return appendErrorInfo("Statement: Illegal expresion statement.", GETRC);
-        }
+        if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
+            PARSEFAIL("Statement: Illegal expresion statement.");
         if (DEBUG) cout << "ok parsed expression statement" << endl;
         addChildren(ptr); return true;
     }
@@ -132,16 +121,14 @@ bool MontNode::tryParseStatement(MontLexer& lexer) {
 
 bool MontNode::tryParseCodeblock(MontLexer& lexer){
     if (DEBUG) cout << "try parse codeblock " << lexer.peek() << endl;
-    Mnp ptr = new MontNode(); ptr->kind = NK_CODEBLOCK;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_CODEBLOCK;
     if (!ptr->tryParse(lexer, TK_LBRACE)) 
-        return appendErrorInfo("Codeblock: LBrace expected.", GETRC);
+        PARSEFAIL("Codeblock: LBrace expected.");
     while (true) {
         Token peek = lexer.peek();
         if (peek.tokenKind == TK_RBRACE) break;
-        if (!ptr->tryParseStatement(lexer)) {
-            ptr->putback(lexer); delete ptr;
-            return appendErrorInfo("Codeblock: Illegal statement.", GETRC);
-        }
+        if (!ptr->tryParseStatement(lexer)) 
+            PARSEFAIL("Codeblock: Illegal statement.");
     }
     if (DEBUG) cout << "ok parsed codeblock" << endl;
     ptr->tryParse(lexer, TK_RBRACE); 
@@ -150,24 +137,21 @@ bool MontNode::tryParseCodeblock(MontLexer& lexer){
 
 bool MontNode::tryParseFunction(MontLexer& lexer) {
     if (DEBUG) cout << "try parse function " << lexer.peek() << endl;
-    Mnp ptr = new MontNode(); ptr->kind = NK_FUNCTION;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_FUNCTION;
     if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER) ||
         !ptr->tryParse(lexer, TK_LPAREN) || !ptr->tryParse(lexer, TK_RPAREN) ||
-        !ptr->tryParseCodeblock(lexer)) {
-            ptr->putback(lexer); delete ptr;
-            return appendErrorInfo("Function: Illegal function definition.", GETRC);
-        }
+        !ptr->tryParseCodeblock(lexer)) 
+        PARSEFAIL("Function: Illegal function definition.");
+    MontTokenNode* identifierNode = (MontTokenNode*)(ptr->children[1]);
     if (DEBUG) cout << "ok parsed function" << endl;
     addChildren(ptr); return true;
 }
 
 bool MontNode::tryParseProgram(MontLexer& lexer) {
     if (DEBUG) cout << "try parse program " << lexer.peek() << endl;
-    Mnp ptr = new MontNode(); ptr->kind = NK_PROGRAM;
-    if (!ptr->tryParseFunction(lexer) || !ptr->tryParse(lexer, TK_EOF)) {
-        ptr->putback(lexer); delete ptr;
-        return appendErrorInfo("Program: Illegal program.", GETRC);
-    }
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_PROGRAM;
+    if (!ptr->tryParseFunction(lexer) || !ptr->tryParse(lexer, TK_EOF))
+        PARSEFAIL("Program: Illegal program.");
     if (DEBUG) cout << "ok parsed program" << endl;
     addChildren(ptr); return true;
 }

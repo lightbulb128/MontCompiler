@@ -1,15 +1,3 @@
-/*
-program     :   function EOF
-function    :   type Identifier LParen RParen codeblock
-codeblock   :   LBrace (statement)* RBrace
-statement   :   type Identifier Semicolon
-            |   expression Semicolon
-            |   Return expression Semicolon
-type        :   Integer | Char
-expression  :   value
-value       :   CharValue | IntValue
-*/
-
 #ifndef MONTPARSER_H
 #define MONTPARSER_H
 
@@ -24,6 +12,7 @@ using std::string;
 
 class MontNode;
 typedef MontNode* MontNodePtr;
+class MontConceiver;
 
 enum MontNodeKind {
     NK_ROOT,
@@ -46,26 +35,28 @@ enum MontNodeExpansion {
 };
 
 class MontNode {
+    friend class MontConceiver;
 protected:
     MontNodeKind kind;
     MontNodeExpansion expansion;
     vector<MontNodePtr> children;
-    static MontLog logger;
     // static string errorInfo;
     int row, column;
 public:
-    MontNode(){children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;}
+    MontNode(MontLexer& lexer){
+        children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
+        lexer.peek(); row = lexer.getCurrentRow(); column = lexer.getCurrentColumn();
+    }
+    MontNode(){
+        children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
+        //lexer.peek(); row = lexer.getCurrentRow(); column = lexer.getCurrentColumn();
+    }
     MontNodeKind getKind(){return kind;}
     void setKind(MontNodeKind k){kind=k;}
     virtual ~MontNode();
     virtual void putback(MontLexer& lexer);
-    static bool appendErrorInfo(string str, int row, int column){
-        logger.log("(" + std::to_string(row) + ":" + std::to_string(column) + ") " 
-            + str); 
-        return false;
-    }
-    static string getErrorInfo(){return logger.get();}
-    static void resetErrorInfo(){logger.clear();}
+    static bool appendErrorInfo(string str, int row, int column);
+    //void trySetRC(MontLexer& lexer){lexer.peek(); if (children.size()==0) row=lexer.getCurrentRow(), column=lexer.getCurrentColumn();}
     void addChildren(MontNodePtr ptr); 
     bool tryParse(MontLexer& lexer, TokenKind tk);
     bool isValueToken(Token& t);
@@ -95,13 +86,21 @@ public:
 };
 
 class MontParser {
+    friend class MontConceiver;
 private:
+    static MontLog logger;
     MontNodePtr program;
 public:
     MontParser();
     bool parse(MontLexer& lexer);
-    string getErrorMessage(){return MontNode::getErrorInfo();}
     friend std::ostream& operator << (std::ostream& stream, MontParser& parser);
+    static bool appendErrorInfo(string str, int row, int column){
+        logger.log("(" + std::to_string(row) + ":" + std::to_string(column) + ") " 
+            + str); 
+        return false;
+    }
+    static string getErrorInfo(){return logger.get();}
+    static void resetErrorInfo(){logger.clear();}
 };
 
 #endif

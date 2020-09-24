@@ -1,5 +1,7 @@
 #include "montLexer.h"
 #include "montParser.h"
+#include "montConceiver.h"
+
 #include <iostream>
 #include <list>
 using namespace std;
@@ -33,7 +35,7 @@ int mainParser(){
         cout << "Lexer message: " << endl;
         cout << lexer.getErrorInfo();
         cout << "Parser message: " << endl;
-        cout << parser.getErrorMessage();
+        cout << parser.getErrorInfo();
         while (lexer.peek().tokenKind!=TK_EOF) {
             cout<<lexer.nextToken();
         }
@@ -41,7 +43,33 @@ int mainParser(){
     return 0;
 }
 
+int mainConceiver(){
+    MontLexer lexer(true);
+    lexer.openStream("lextest.txt");
+    MontParser parser;
+    bool f = parser.parse(lexer);
+    if (!f) {
+        cout << "Lexer message: " << endl;
+        cout << lexer.getErrorInfo();
+        cout << "Parser message: " << endl;
+        cout << parser.getErrorInfo();
+        while (lexer.peek().tokenKind!=TK_EOF) {
+            cout<<lexer.nextToken();
+        }
+        return 0;
+    }
+    MontConceiver conceiver; 
+    f = conceiver.conceive(parser);
+    if (f) {
+        cout << conceiver; 
+    } else {
+        cout << "Conceiver message: " << endl;
+        cout << conceiver.getErrorInfo();
+    }
+    return 0;
+}
+
 int main(){
-    mainParser();
+    mainConceiver();
     return 0;
 }

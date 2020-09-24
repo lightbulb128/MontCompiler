@@ -14,6 +14,7 @@ const int   VALID_CHAR_RANGE  = 26;
 const int   VALID_CHAR_OFFSET = 97;
 // const char* VALID_SYMBOLS    = "~!%^&*()-=+[]{}\\|;:<>,./?";
 const char * const VALID_SYMBOLS = "(){};><=,"; // quote should not be treated as a symbol
+const int MAX_INT = 0x7fffffff;
 
 enum TokenKind {
     // identifier
@@ -24,7 +25,7 @@ enum TokenKind {
     TK_RETURN, TK_INT, TK_CHAR,
     // symbols
     TK_LPAREN, TK_RPAREN, TK_LBRACE, TK_RBRACE, TK_SEMICOLON, 
-    TK_COLON, 
+    TK_COMMA, 
     TK_GREATER, TK_LESS, TK_GREATER_EQUAL, TK_LESS_EQUAL, 
     TK_RIGHT_SHIFT, TK_LEFT_SHIFT, 
     TK_EQUAL,
@@ -115,6 +116,7 @@ public:
     Token nextToken();
     string getErrorInfo(){return logger.get();}
     void putback(Token token);
+    void killSpaces();
     Token peek();
     char getChar(){
         if (lastChar == '\n' || lastChar == EOF) {currentRow++; currentColumn=1;}
@@ -128,8 +130,14 @@ public:
         lastChar = ' ';
         stream.putback(c);
     }
-    int getCurrentRow(){return currentRow;}
-    int getCurrentColumn(){return currentColumn;}
+    int getCurrentRow(){
+        if (!buffer.empty()) return buffer.top().row;
+        return currentRow;
+    }
+    int getCurrentColumn(){
+        if (!buffer.empty()) return buffer.top().column;
+        return currentColumn;
+    }
 };
 
 #endif

@@ -1,4 +1,3 @@
-int main(){
-    return 12a;
-    return 0;
+int some(){
+    return 24;
 }

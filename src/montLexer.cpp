@@ -34,7 +34,7 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_LBRACE: stream << "LBrace {"; break;
         case TK_RBRACE: stream << "RBrace }"; break;
         case TK_SEMICOLON: stream << "Semicolon ;"; break;
-        case TK_COLON: stream << "Colon ,"; break;
+        case TK_COMMA: stream << "Comma ,"; break;
         case TK_GREATER: stream << "Greater >"; break; 
         case TK_LESS: stream << "Less <"; break;
         case TK_GREATER_EQUAL: stream << "Greater or equal >="; break;
@@ -157,7 +157,7 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
             case ';':
                 currentToken = Token(TK_SEMICOLON); return TR_FINISHED; break; 
             case ',':
-                currentToken = Token(TK_COLON); return TR_FINISHED; break; 
+                currentToken = Token(TK_COMMA); return TR_FINISHED; break; 
             case '=':
                 if (peek=='=') {currentToken = Token(TK_EQUAL); return TR_PEEKUSED_FINISHED;} 
                 else {currentToken = Token(TK_ASSIGN); return TR_FINISHED;}
@@ -221,11 +221,19 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                     else if (c=='f') {appendErrorInfo("Value Error: Float value unsupported."); return TR_ERROR;}
                     else if (c=='.') {appendErrorInfo("Value Error: Float value unsupported."); return TR_ERROR;}
                     else if (!isNumber(c)) {appendErrorInfo("Value Error: Illegal decimal integer value."); return TR_ERROR;}
-                    currentValue = currentValue * 10 + c - 48; 
+                    long long intermediate = (long long)currentValue * 10 + c - 48; 
+                    if (intermediate > MAX_INT) {
+                        appendErrorInfo("Value Error: Too large an integer.");
+                        return TR_ERROR;
+                    } else currentValue = intermediate;
                 } else { 
                     if (isSpace(c) || isSymbol(c)) {currentToken = Token(TK_INT_VALUE, currentValue); return TR_PUTBACK;}
                     else if (!isNumber(c) && !(c>='A' && c<='F') && (!c>='a'  && c<='f')) {appendErrorInfo("Value: Illegal hexadecimal value."); return TR_ERROR;}
-                    currentValue = currentValue * 16 + ((c<='9') ? (c-48) : ((c<='F') ? (c-'A'+10) : (c-'a'+10))); 
+                    long long intermediate = (long long)currentValue * 16 + ((c<='9') ? (c-48) : ((c<='F') ? (c-'A'+10) : (c-'a'+10))); 
+                    if (intermediate > MAX_INT) {
+                        appendErrorInfo("Value Error: Too large an integer.");
+                        return TR_ERROR;
+                    } else currentValue = intermediate;
                 }
             } else { // 'c', '\n', '\123', '\x123456'
                 if (currentLength == 1) {
@@ -267,18 +275,24 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
     return TR_CONTINUE;
 }
 
-Token MontLexer::nextToken(){
-    if (!buffer.empty()) {Token ret = buffer.top(); buffer.pop(); return ret;}
-    reset();
+void MontLexer::killSpaces(){ 
     char c;
     while (true) { // get rid of spaces
-        if (stream.eof()) {
-            Token ret = Token(TK_EOF);
-            ret.setRC(currentRow+1, currentColumn);
-            return ret;
-        }
+        if (stream.eof()) return;
         c = getChar();
         if (!isSpace(c)) break;
+    }
+    putbackChar(c);
+}
+
+Token MontLexer::nextToken(){
+    if (!buffer.empty()) {Token ret = buffer.top(); buffer.pop(); return ret;}
+    reset(); killSpaces();
+    char c = getChar();
+    if (c==EOF){
+        Token ret = Token(TK_EOF);
+        ret.setRC(currentRow+1, currentColumn);
+        return ret;
     }
     int cr = currentRow, cc = currentColumn;
     char peek = stream.peek();
@@ -289,7 +303,7 @@ Token MontLexer::nextToken(){
                 currentLength++; currentToken.setRC(cr,cc);
                 return currentToken; break;
             case TR_PEEKUSED_FINISHED: 
-                currentLength+=2; getChar(); currentToken.setRC(cr,cc);
+                currentLength+=2; getChar(); currentToken.setRC(cr,cc); 
                 return currentToken; break;
             case TR_PEEKUSED_CONTINUE:
                 currentLength+=2; 
