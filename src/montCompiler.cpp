@@ -35,6 +35,6 @@ bool compile(const char* filename){
 }
 
 int main(int argc, const char* argv[]){
-    compile(argv[1]);
-    return 0;
+    if (compile(argv[1])) return 0;
+    return -1; 
 }

@@ -24,7 +24,7 @@ string MontIntermediate::toString(){
 string MontIntermediate::toAssembly(){
     switch (code) {
         case IR_PUSH: // addi sp, sp, -4 ; li t1, X ; sw t1, 0(sp)
-            return string("addi sp, sp, -4\nli t1, ") + to_string(num) + "\nsw, t1, 0(sp)\n";
+            return string("addi sp, sp, -4\nli t1, ") + to_string(num) + "\nsw t1, 0(sp)\n";
         case IR_RET:  // lw a0, 0(sp) ; addi sp, sp, 4 ; jr ra
             return string("lw a0, 0(sp)\naddi sp, sp, 4\njr ra\n");
         default:
