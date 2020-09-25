@@ -19,3 +19,6 @@ MiniDecaf 有 6 个阶段，每个阶段的 ddl 截止时，我们会检查你�
 * 如果 `.gitlab-ci.yml` 没有改动，并且 `step-until.txt` 中的数字大于等于那个阶段的最后一个 step 编号，我们就认为你按时完成了该阶段任务。
 
 * 否则，我们会等待你通过该阶段任务，并且按照指导书所说折算晚交扣分。
+
+# 文件
+montLexer 词法分析 montParser 语法分析生成AST montConceiver 生成中间代码 montAssembler 生成汇编代码

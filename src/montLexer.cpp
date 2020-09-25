@@ -239,10 +239,17 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                     else {appendErrorInfo("Value Error: Illegal char value, too long."); return TR_ERROR;}
                 } else if (currentLength == 2 && isValueCharEscape) { 
                     switch (c) {
+                        case 'a' : currentValue = '\a'; break;
+                        case 'b' : currentValue = '\b'; break;
+                        case 'f' : currentValue = '\f'; break;
                         case 'n' : currentValue = '\n'; break;
                         case 'r' : currentValue = '\r'; break;
                         case 't' : currentValue = '\t'; break;
                         case 'v' : currentValue = '\v'; break;
+                        case '\\' : currentValue = '\\'; break;
+                        case '\'' : currentValue = '\''; break;
+                        case '\"' : currentValue = '\"'; break;
+                        case '\?' : currentValue = '\?'; break;
                         case 'x' : isValueHex = true; return TR_CONTINUE; break; 
                         case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7':
                             currentValue = c - 48; break;
