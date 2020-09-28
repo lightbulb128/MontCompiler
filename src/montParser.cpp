@@ -9,7 +9,7 @@ using std::ostream;
 using std::endl;
 using std::cout;
 
-const bool DEBUG = true;
+const bool DEBUG = false;
 const bool SHOW_ROW_LINE = true;
 
 MontLog MontParser::logger = MontLog();
