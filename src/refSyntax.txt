@@ -1,9 +1,11 @@
 program     :   function EOF
 function    :   type Identifier LParen RParen codeblock
 codeblock   :   LBrace (statement)* RBrace
-statement   :   type Identifier Semicolon
-            |   expression Semicolon
-            |   Return expression Semicolon
+statement   :   type Identifier Semicolon             STATEMENT_VARDEFINE
+            |   expression Semicolon                  STATEMENT_EXPRESSION
+            |   Return expression Semicolon           STATEMENT_RETURN
 type        :   Integer | Char
-expression  :   value
+expression  :   unary
+unary       :   value                                 UNARY_VALUE
+            |   (Exclamation|Tilde|Minus) unary       UNARY_OPERATOR
 value       :   CharValue | IntValue
