@@ -20,7 +20,8 @@ enum MontNodeKind {
     NK_FUNCTION,
     NK_CODEBLOCK,
     NK_STATEMENT, 
-    NK_EXPRESSION, 
+    NK_EXPRESSION,
+    NK_UNARY, 
     NK_TYPE,
     NK_VALUE,
     NK_TOKEN,
@@ -31,7 +32,9 @@ enum MontNodeExpansion {
     NE_NONE, 
     NE_STATEMENT_VARDEFINE,
     NE_STATEMENT_EXPRESSION,
-    NE_STATEMENT_RETURN
+    NE_STATEMENT_RETURN,
+    NE_UNARY_VALUE,
+    NE_UNARY_OPERATION
 };
 
 class MontNode {
@@ -59,10 +62,12 @@ public:
     //void trySetRC(MontLexer& lexer){lexer.peek(); if (children.size()==0) row=lexer.getCurrentRow(), column=lexer.getCurrentColumn();}
     void addChildren(MontNodePtr ptr); 
     bool tryParse(MontLexer& lexer, TokenKind tk);
-    bool isValueToken(Token& t);
+    static bool isValueToken(Token& t);
     bool tryParseValue(MontLexer& lexer);
+    static bool isUnaryOperatorToken(Token& t);
+    bool tryParseUnary(MontLexer& lexer);
     bool tryParseExpression(MontLexer& lexer); 
-    bool isTypeToken(Token& t);
+    static bool isTypeToken(Token& t);
     bool tryParseType(MontLexer& lexer);
     bool tryParseStatement(MontLexer& lexer);
     bool tryParseCodeblock(MontLexer& lexer);

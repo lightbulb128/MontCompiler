@@ -9,7 +9,7 @@ using std::ostream;
 using std::endl;
 using std::cout;
 
-const bool DEBUG = false;
+const bool DEBUG = true;
 const bool SHOW_ROW_LINE = true;
 
 MontLog MontParser::logger = MontLog();
@@ -70,11 +70,33 @@ bool MontNode::tryParseValue(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
+bool MontNode::isUnaryOperatorToken(Token& t){
+    return (t.tokenKind == TK_EXCLAMATION ||
+        t.tokenKind == TK_TILDE ||
+        t.tokenKind == TK_MINUS);
+}
+
+bool MontNode::tryParseUnary(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse unary " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_UNARY;
+    Token token = lexer.peek();
+    if (!isUnaryOperatorToken(token)) {
+        ptr->expansion = NE_UNARY_VALUE;
+        if (!ptr->tryParseValue(lexer)) 
+            PARSEFAIL("Unary: Expect value token.");
+    } else {
+        ptr->expansion = NE_UNARY_OPERATION;
+        if (!ptr->tryParse(lexer, token.tokenKind) || !ptr->tryParseUnary(lexer)) 
+            PARSEFAIL("Unary: Expect unary.");
+    }
+    if (DEBUG) cout << "ok parsed unary" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::tryParseExpression(MontLexer& lexer) {
     if (DEBUG) cout << "try parse expression " << lexer.peek() << endl;
-    Token token = lexer.peek();
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_EXPRESSION;
-    if (!ptr->tryParseValue(lexer)) PARSEFAIL("Expression: Not valid expression.");
+    if (!ptr->tryParseUnary(lexer)) PARSEFAIL("Expression: Not valid unary.");
     if (DEBUG) cout << "ok parsed expression" << endl;
     addChildren(ptr); return true;
 }

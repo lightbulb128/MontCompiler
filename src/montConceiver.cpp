@@ -23,6 +23,12 @@ string MontIntermediate::toString(){
 
 string MontIntermediate::toAssembly(){
     switch (code) {
+        case IR_LNOT: // lw t1,0(sp); seqz t1,t1; sw t1,0(sp)
+            return string("lw t1, 0(sp)\nseqz t1,t1\nsw t1,0(sp)\n");
+        case IR_NEG: // lw t1,0(sp); neg t1,t1; sw t1,0(sp)
+            return string("lw t1, 0(sp)\nneg t1,t1\nsw t1,0(sp)\n");
+        case IR_NOT: // lw t1,0(sp); not t1,t1; sw t1,0(sp)
+            return string("lw t1, 0(sp)\nnot t1,t1\nsw t1,0(sp)\n");
         case IR_PUSH: // addi sp, sp, -4 ; li t1, X ; sw t1, 0(sp)
             return string("addi sp, sp, -4\nli t1, ") + to_string(num) + "\nsw t1, 0(sp)\n";
         case IR_RET:  // lw a0, 0(sp) ; addi sp, sp, 4 ; jr ra
@@ -104,6 +110,29 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_TYPE:{
             return true;
+            break;
+        }
+        case NK_UNARY: {
+            switch (node->expansion) {
+                case NE_UNARY_OPERATION: { // unary : (Exclamation|Minus|Tilde) unary
+                    if (!visitChild(node, 1)) 
+                        return false;
+                    Token op = getTokenChild(node, 0);
+                    if (op.tokenKind == TK_MINUS) 
+                        add(IRSIM(IR_NEG));
+                    else if (op.tokenKind == TK_EXCLAMATION)
+                        add(IRSIM(IR_LNOT));
+                    else if (op.tokenKind == TK_TILDE)
+                        add(IRSIM(IR_NOT));
+                    else
+                        return appendErrorInfo("Unary: No operator.", node->row, node->column); 
+                    break;
+                } 
+                case NE_UNARY_VALUE: { // unary : value
+                    return visitChild(node, 0);
+                    break;
+                }
+            }           
             break;
         }
         case NK_VALUE:{

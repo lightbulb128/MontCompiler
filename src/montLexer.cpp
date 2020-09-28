@@ -47,6 +47,10 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_EOF: stream << "EOF"; break;
         case TK_UNDEFINED: stream << "Undefined"; break;
         case TK_ERROR: stream << "Error"; break;
+        case TK_EXCLAMATION: stream << "Exclamation !"; break;
+        case TK_TILDE: stream << "Tilde ~"; break;
+        case TK_NOTEQUAL: stream << "Not equal !="; break;
+        case TK_MINUS: stream << "Minus -"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -170,6 +174,14 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                 else if (peek='>') {currentToken = Token(TK_LEFT_SHIFT); return TR_PEEKUSED_FINISHED;}
                 else {currentToken = Token(TK_LESS); return TR_FINISHED;}
                 break;
+            case '-':
+                currentToken = Token(TK_MINUS); return TR_FINISHED; break;
+            case '!':
+                if (peek=='=') {currentToken = Token(TK_NOTEQUAL); return TR_PEEKUSED_FINISHED;}
+                else {currentToken = Token(TK_EXCLAMATION); return TR_FINISHED;}
+                break;
+            case '~':
+                currentToken = Token(TK_TILDE); return TR_FINISHED; break;
             default:
                 flagSymbol = false;
         }

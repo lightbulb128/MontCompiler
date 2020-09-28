@@ -16,7 +16,10 @@ class MontAssembler;
 
 enum IntermediateType {
     IR_PUSH,
-    IR_RET
+    IR_RET,
+    IR_NEG,
+    IR_NOT,
+    IR_LNOT
 };
 
 struct MontIntermediate {
