@@ -21,6 +21,9 @@ enum MontNodeKind {
     NK_CODEBLOCK,
     NK_STATEMENT, 
     NK_EXPRESSION,
+    NK_ADDITIVE,
+    NK_MULTIPLICATIVE,
+    NK_PRIMARY, 
     NK_UNARY, 
     NK_TYPE,
     NK_VALUE,
@@ -33,8 +36,14 @@ enum MontNodeExpansion {
     NE_STATEMENT_VARDEFINE,
     NE_STATEMENT_EXPRESSION,
     NE_STATEMENT_RETURN,
-    NE_UNARY_VALUE,
-    NE_UNARY_OPERATION
+    NE_UNARY_PRIMARY,
+    NE_UNARY_OPERATION,
+    NE_PRIMARY_VALUE,
+    NE_PRIMARY_PAREN,
+    NE_MULTIPLICATIVE_LEAF,
+    NE_MULTIPLICATIVE_INNER,
+    NE_ADDITIVE_LEAF,
+    NE_ADDITIVE_INNER
 };
 
 class MontNode {
@@ -52,8 +61,10 @@ public:
     }
     MontNode(){
         children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
+        row = column = 0;
         //lexer.peek(); row = lexer.getCurrentRow(); column = lexer.getCurrentColumn();
     }
+    void copyRC(MontNode& from) {row=from.row; column=from.column;}
     MontNodeKind getKind(){return kind;}
     void setKind(MontNodeKind k){kind=k;}
     virtual ~MontNode();
@@ -66,6 +77,11 @@ public:
     bool tryParseValue(MontLexer& lexer);
     static bool isUnaryOperatorToken(Token& t);
     bool tryParseUnary(MontLexer& lexer);
+    static bool isAdditiveOperatorToken(Token& t);
+    bool tryParseAdditive(MontLexer& lexer);
+    static bool isMultiplicativeOperatorToken(Token& t);
+    bool tryParseMultiplicative(MontLexer& lexer);
+    bool tryParsePrimary(MontLexer& lexer);
     bool tryParseExpression(MontLexer& lexer); 
     static bool isTypeToken(Token& t);
     bool tryParseType(MontLexer& lexer);

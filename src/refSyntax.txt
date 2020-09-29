@@ -5,7 +5,13 @@ statement   :   type Identifier Semicolon             STATEMENT_VARDEFINE
             |   expression Semicolon                  STATEMENT_EXPRESSION
             |   Return expression Semicolon           STATEMENT_RETURN
 type        :   Integer | Char
-expression  :   unary
-unary       :   value                                 UNARY_VALUE
+expression  :   additive
+additive    :   multiplicative                        ADDITIVE_LEAF
+            |   multiplicative (Plus|Minus) additive  ADDITIVE_INNER
+multiplica  :   unary                                           MULTI_LEAF
+            |   multiplicative (Asterisk|Percent|LSlash) uanry  MULTI_INNER
+unary       :   primary                               UNARY_PRIMARY
             |   (Exclamation|Tilde|Minus) unary       UNARY_OPERATOR
+primary     :   value                                 PRIMARY_VALUE
+            |   LParen expression RParen              PRIMARY_PAREN
 value       :   CharValue | IntValue

@@ -19,7 +19,12 @@ enum IntermediateType {
     IR_RET,
     IR_NEG,
     IR_NOT,
-    IR_LNOT
+    IR_LNOT,
+    IR_ADD,
+    IR_SUB,
+    IR_MUL,
+    IR_DIV,
+    IR_REM
 };
 
 struct MontIntermediate {

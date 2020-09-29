@@ -51,6 +51,10 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_TILDE: stream << "Tilde ~"; break;
         case TK_NOTEQUAL: stream << "Not equal !="; break;
         case TK_MINUS: stream << "Minus -"; break;
+        case TK_PLUS: stream << "Plus +"; break;
+        case TK_ASTERISK: stream << "Asterisk *"; break;
+        case TK_LSLASH: stream << "LSlash /"; break;
+        case TK_PERCENT: stream << "Percentage %"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -182,6 +186,14 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                 break;
             case '~':
                 currentToken = Token(TK_TILDE); return TR_FINISHED; break;
+            case '+':
+                currentToken = Token(TK_PLUS); return TR_FINISHED; break;
+            case '*':
+                currentToken = Token(TK_ASTERISK); return TR_FINISHED; break;
+            case '/':
+                currentToken = Token(TK_LSLASH); return TR_FINISHED; break;
+            case '%':
+                currentToken = Token(TK_PERCENT); return TR_FINISHED; break;
             default:
                 flagSymbol = false;
         }

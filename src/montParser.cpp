@@ -76,14 +76,41 @@ bool MontNode::isUnaryOperatorToken(Token& t){
         t.tokenKind == TK_MINUS);
 }
 
+bool MontNode::isAdditiveOperatorToken(Token& t){
+    return (t.tokenKind == TK_MINUS) || (t.tokenKind == TK_PLUS);
+}
+
+bool MontNode::isMultiplicativeOperatorToken(Token& t){
+    return (t.tokenKind == TK_ASTERISK) || (t.tokenKind == TK_LSLASH) 
+        || (t.tokenKind == TK_PERCENT);
+}
+
+bool MontNode::tryParsePrimary(MontLexer& lexer){
+    if (DEBUG) cout << "try parse primary " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_PRIMARY;
+    Token token = lexer.peek();
+    if (token.tokenKind == TK_LPAREN) {
+        ptr->expansion = NE_PRIMARY_PAREN;
+        if (!ptr->tryParse(lexer, TK_LPAREN) || !ptr->tryParseExpression(lexer) 
+            || !ptr->tryParse(lexer, TK_RPAREN)) 
+            PARSEFAIL("Primary: Expect LParen expression RParen.");
+    } else {
+        ptr->expansion = NE_PRIMARY_VALUE;
+        if (!ptr->tryParseValue(lexer)) 
+            PARSEFAIL("Primary: Expect value syntax.");
+    }
+    if (DEBUG) cout << "ok parsed primary" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::tryParseUnary(MontLexer& lexer) {
     if (DEBUG) cout << "try parse unary " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_UNARY;
     Token token = lexer.peek();
     if (!isUnaryOperatorToken(token)) {
-        ptr->expansion = NE_UNARY_VALUE;
-        if (!ptr->tryParseValue(lexer)) 
-            PARSEFAIL("Unary: Expect value token.");
+        ptr->expansion = NE_UNARY_PRIMARY;
+        if (!ptr->tryParsePrimary(lexer)) 
+            PARSEFAIL("Unary: Expect primary syntax.");
     } else {
         ptr->expansion = NE_UNARY_OPERATION;
         if (!ptr->tryParse(lexer, token.tokenKind) || !ptr->tryParseUnary(lexer)) 
@@ -93,10 +120,53 @@ bool MontNode::tryParseUnary(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
+// This is not a recursive procedure
+bool MontNode::tryParseMultiplicative(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse multiplicative " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_MULTIPLICATIVE;
+    ptr->expansion = NE_MULTIPLICATIVE_LEAF;
+    if (!ptr->tryParseUnary(lexer)) 
+        PARSEFAIL("Multiplicative: Expect unary syntax.");
+    Token token = lexer.peek();
+    while (isMultiplicativeOperatorToken(token)) {
+        Mnp newptr = new MontNode(); newptr->kind = NK_MULTIPLICATIVE;
+        newptr->expansion = NE_MULTIPLICATIVE_INNER;
+        newptr->copyRC(*ptr);
+        newptr->addChildren(ptr); ptr = newptr;
+        ptr->tryParse(lexer, token.tokenKind);
+        if (!ptr->tryParseUnary(lexer)) 
+            PARSEFAIL("Multiplicative: Expect unary syntax after operator.");
+        token = lexer.peek();
+    }
+    if (DEBUG) cout << "ok parsed multiplicative" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseAdditive(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse additive " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_ADDITIVE;
+    ptr->expansion = NE_ADDITIVE_LEAF;
+    if (!ptr->tryParseMultiplicative(lexer)) 
+        PARSEFAIL("Additive: Expect multiplicative syntax.");
+    Token token = lexer.peek();
+    while (isAdditiveOperatorToken(token)) {
+        Mnp newptr = new MontNode(); newptr->kind = NK_ADDITIVE;
+        newptr->expansion = NE_ADDITIVE_INNER;
+        newptr->copyRC(*ptr);
+        newptr->addChildren(ptr); ptr = newptr;
+        ptr->tryParse(lexer, token.tokenKind);
+        if (!ptr->tryParseMultiplicative(lexer)) 
+            PARSEFAIL("Additive: Expect multiplicative syntax after operator.");
+        token = lexer.peek();
+    }
+    if (DEBUG) cout << "ok parsed additive" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::tryParseExpression(MontLexer& lexer) {
     if (DEBUG) cout << "try parse expression " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_EXPRESSION;
-    if (!ptr->tryParseUnary(lexer)) PARSEFAIL("Expression: Not valid unary.");
+    if (!ptr->tryParseAdditive(lexer)) PARSEFAIL("Expression: Not valid additive.");
     if (DEBUG) cout << "ok parsed expression" << endl;
     addChildren(ptr); return true;
 }
@@ -211,10 +281,15 @@ void MontNode::output(int tabcount, ostream& out) {
         case NK_EXPRESSION: out << "expression"; break;
         case NK_TYPE:       out << "type"; break;
         case NK_VALUE:      out << "value"; break;
+        case NK_UNARY:      out << "unary"; break;
+        case NK_MULTIPLICATIVE: out << "multiplicative"; break;
+        case NK_ADDITIVE:   out << "additive"; break;
+        case NK_PRIMARY:    out << "primary"; break;
         case NK_UNDEFINED:  out << "undefined"; break;
     }
-    out << " {" << endl;
+    //out << " {" << endl;
+    out << endl;
     for (auto child : children) 
         child->output(tabcount+1, out);
-    out << sp << "}" << endl;
+    //out << sp << "}" << endl;
 }

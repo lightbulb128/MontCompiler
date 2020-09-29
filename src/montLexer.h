@@ -13,7 +13,7 @@ using std::stack;
 const int   VALID_CHAR_RANGE  = 26;
 const int   VALID_CHAR_OFFSET = 97;
 // const char* VALID_SYMBOLS    = "~!%^&*()-=+[]{}\\|;:<>,./?";
-const char * const VALID_SYMBOLS = "(){};><=,-~!"; // quote should not be treated as a symbol
+const char * const VALID_SYMBOLS = "(){};><=,-~!+*%/"; // quote should not be treated as a symbol
 const int MAX_INT = 0x7fffffff;
 
 enum TokenKind {
@@ -31,6 +31,7 @@ enum TokenKind {
     TK_EQUAL,
     TK_MINUS, TK_TILDE, TK_EXCLAMATION, TK_NOTEQUAL, 
     TK_ASSIGN,
+    TK_PLUS, TK_ASTERISK, TK_LSLASH, TK_PERCENT, 
     // eof
     TK_EOF,
     // error
