@@ -321,9 +321,9 @@ void MontLexer::killSpaces(){
     while (true) { // get rid of spaces
         if (stream->eof()) return;
         c = getChar();
-        if (c=='/' && stream->peek()=='/') {
+        if (c=='/' && stream->peek()=='/') { // process // comment
             while (c!='\n') c = getChar();
-        } else if (c=='/' && stream->peek()=='*') {
+        } else if (c=='/' && stream->peek()=='*') { // process /* */ comment
             while (c!='*' || stream->peek()!='/') c=getChar();
             c=getChar(); c=getChar();
         }
