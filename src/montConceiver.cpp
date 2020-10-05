@@ -1,11 +1,16 @@
 #include "montConceiver.h"
 #include "montParser.h"
 #include "montLexer.h"
+#include <assert.h>
 
 #define IRSIM(c) (MontIntermediate::simple(c))
-#define IRINT(c, v) (MontIntermediate::intcode(c, v))
-#define INSTR(c, s) (MontIntermediate::strcode(c, s))
+#define IRINT(c, v) (MontIntermediate::intcode(c, (v)))
+#define IRSTR(c, s) (MontIntermediate::strcode(c, (s)))
 #define NRC node->row, node->column
+#define LW2 "lw t1, 4(sp)\nlw t2, 0(sp)\n"
+#define LW1 "lw t1, 0(sp)\n"
+#define SW1 "sw t1, 0(sp)\n"
+#define BSP "addi sp, sp, 4\n"
 
 MontLog MontConceiver::logger = MontLog();
 
@@ -31,59 +36,90 @@ string MontIntermediate::toString(){
         case IR_REM: return "REM";
         case IR_RET: return "RET";
         case IR_SUB: return "SUB";
+        case IR_MARK: return str + ":";
+        case IR_FRAMEADDR: return "FRAMEADDR " + to_string(num);
+        case IR_POP: return "POP";
+        case IR_LOAD: return "LOAD";
+        case IR_STORE: return "STORE";
+        case IR_BUILDFRAME: return "BUILDFRAME " + to_string(num);
         default: return "IRERROR";
     }
 }
 
+inline string _L(string s){return s+"\n";}
+
 string MontIntermediate::toAssembly(){
     switch (code) {
-        case IR_ADD:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nadd t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_DIV:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\ndiv t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_EQ:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsub t1, t1, t2\nseqz t1, t1\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_GE:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nslt t1, t1, t2\nxori t1, t1, 1\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_GT:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsgt t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_LAND:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsnez t1, t1\nsnez t2, t2\nand t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_ADD: return LW2 + _L("add t1, t1, t2") + BSP + SW1;
+        case IR_BUILDFRAME: return 
+                _L("sw ra, -4(sp)") + 
+                _L("sw fp, -8(sp)") + 
+                _L("ori fp, sp, 0") + 
+                _L("addi sp, sp, -" + to_string(num + 8));
+        case IR_DIV: return LW2 + _L("div t1, t1, t2") + BSP + SW1;
+        case IR_EQ: return LW2 + 
+                _L("sub t1, t1, t2") + 
+                _L("seqz t1, t1") + BSP + SW1;
+        case IR_FRAMEADDR: return 
+                _L("addi sp, sp, -4") +
+                _L("addi t1, fp, " + to_string(-12-num*4)) +
+                _L("sw t1, 0(sp)");
+        case IR_GE: return LW2 + 
+                _L("slt t1, t1, t2") +
+                _L("xori t1, t1, 1") + BSP + SW1;
+        case IR_GT: return LW2 + _L("sgt t1, t1, t2") + BSP + SW1;
+        case IR_LAND: return LW2 +
+                _L("snez t1, t1") + 
+                _L("snez t2, t2") + 
+                _L("and t1, t1, t2") + BSP + SW1;
         case IR_LE:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsgt t1, t1, t2\nxori t1, t1, 1\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_LNOT: 
-            return string("lw t1, 0(sp)\nseqz t1,t1\nsw t1,0(sp)\n");
+            return LW2 + 
+                _L("sgt t1, t1, t2") +
+                _L("xori t1, t1, 1") +BSP+SW1;
+        case IR_LNOT: return LW1 + _L("seqz t1,t1") + SW1;
+        case IR_LOAD: return 
+                _L("lw t1, 0(sp)") +
+                _L("lw t1, 0(t1)") +
+                _L("sw t1, 0(sp)");
         case IR_LOR:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nor t1, t1, t2\nsnez t1, t1\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_LT:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nslt t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_MUL:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nmul t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_NEG: 
-            return string("lw t1, 0(sp)\nneg t1,t1\nsw t1,0(sp)\n");
-        case IR_NEQ:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsub t1, t1, t2\nsnez t1, t1\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_NOT: 
-            return string("lw t1, 0(sp)\nnot t1,t1\nsw t1,0(sp)\n");
-        case IR_PUSH: 
-            return string("addi sp, sp, -4\nli t1, ") + to_string(num) + "\nsw t1, 0(sp)\n";
-        case IR_REM:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nrem t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_RET:  
-            return string("lw a0, 0(sp)\naddi sp, sp, 4\njr ra\n");
-        case IR_SUB:
-            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsub t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        default:
-            return "nop";
+            return LW2 + 
+                _L("or t1, t1, t2") + 
+                _L("snez t1, t1")+BSP+SW1;
+        case IR_LT: return LW2 + _L("slt t1, t1, t2")+BSP+SW1;
+        case IR_MARK: return str + ":";
+        case IR_MUL: return LW2 + _L("mul t1, t1, t2")+BSP+SW1;
+        case IR_NEG: return LW1 + _L("neg t1,t1") + SW1;
+        case IR_NEQ: return LW2 + 
+                _L("sub t1, t1, t2") + 
+                _L("snez t1, t1") + BSP + SW1;
+        case IR_NOT: return LW2 + _L("not t1,t1") + SW1;
+        case IR_POP: return BSP;
+        case IR_PUSH: return 
+                _L("addi sp, sp, -4") + 
+                _L("li t1, " + to_string(num)) + SW1;
+        case IR_REM: return LW2 + _L("rem t1, t1, t2")+BSP+SW1;
+        case IR_RET: return 
+                _L("lw a0, 0(sp)") +
+                _L("addi sp, sp, 4") + 
+                _L("ori sp, fp, 0") +
+                _L("lw ra, -4(sp)") +
+                _L("lw fp, -8(sp)") + 
+                _L("jr ra"); 
+        case IR_STORE: return LW2 + _L("sw t1, 0(t2)") + BSP;
+        case IR_SUB: return LW2 + _L("sub t1, t1, t2")+BSP+SW1;
+        default: return "nop";
     }
 }
 
 ostream& operator <<(ostream& out, MontIntermediate ir){
-    out << ir.toString(); return out;
+    if (ir.code != IR_MARK) out << "    " << ir.toString(); 
+    else out << ir.toString();
+    return out;
 }
 
 MontConceiver::MontConceiver() {
     irs = vector<MontIntermediate>();
+    frames = vector<MontStackFrame>();
 }
 
 bool MontConceiver::visitChildren(MontNodePtr ptr){
@@ -115,9 +151,40 @@ bool MontConceiver::visit(MontNodePtr node) {
                 return appendErrorInfo("Additive: Undefined additive syntax.", node->row, node->column);
             break;
         }
+        case NK_ASSIGNMENT: { 
+            if (node->expansion == NE_ASSIGNMENT_VALUE)
+                return visitChild(node, 0);
+            else if (node->expansion == NE_ASSIGNMENT_ASSIGN) { // Identifier Assign expression
+                Token name = getTokenChild(node, 0);
+                int id = getIdentifier(name.identifier);
+                if (id==-1) 
+                    return appendErrorInfo("Assignment: Undefined identifier: " + name.identifier + ".", NRC);
+                flag = visitChild(node, 2);
+                if (!flag) return false;
+                add(IRINT(IR_FRAMEADDR, id));
+                add(IRSIM(IR_STORE));
+                return true;
+            } else 
+                return appendErrorInfo("Assignment: Undefined assignment syntax.", NRC);
+        }
         case NK_CODEBLOCK: { 
             return visitChildren(node);
             break;
+        }
+        case NK_DECLARATION: { // type Identifier [Assign Expression]
+            Token name = getTokenChild(node, 1);
+            pushIdentifier(name.identifier, IT_VARIABLE);
+            if (node->expansion == NE_DECLARATION_INIT) {
+                flag = visitChild(node, 3);
+                if (!flag) return false;
+            } else if (node->expansion == NE_DECLARATION_SIMPLE) 
+                add(IRINT(IR_PUSH, 0));
+            else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
+            int id = getIdentifier(name.identifier);
+            add(IRINT(IR_FRAMEADDR, id));
+            add(IRSIM(IR_STORE));
+            add(IRSIM(IR_POP));
+            return true;
         }
         case NK_EQUALITY: {
             if (node->expansion == NE_EQUALITY_LEAF) 
@@ -143,8 +210,22 @@ bool MontConceiver::visit(MontNodePtr node) {
         case NK_FUNCTION: {
             Token identifier = getTokenChild(node, 1);
             if (identifier.identifier!="main") 
-                return appendErrorInfo("Function: Function name not 'main'.", node);
-            return visitChild(node, 4);
+                flag = appendErrorInfo("Function: Function name not 'main'.", node);
+            else {
+                int oldPointer = variablePointer;
+                add(IRSTR(IR_MARK, identifier.identifier));
+                add(IRINT(IR_BUILDFRAME, node->memorySize)); 
+                pushFrame(true);
+                flag = visitChild(node, 4);
+                popFrame();
+                // 如若最后一条指令不是ret，则添加一个ret，默认返回值为0.
+                if (irs[irs.size()-1].code != IR_RET) {
+                    add(IRINT(IR_PUSH, 0));
+                    add(IRSIM(IR_RET));
+                }
+                variablePointer = oldPointer;
+            }
+            return flag;
             break;
         }
         case NK_LOGICAL_AND: {
@@ -201,7 +282,13 @@ bool MontConceiver::visit(MontNodePtr node) {
                 return visitChild(node, 0);
             else if (node->expansion == NE_PRIMARY_PAREN)
                 return visitChild(node, 1); 
-            else 
+            else if (node->expansion == NE_PRIMARY_IDENTIFIER) {
+                Token name = getTokenChild(node, 0);
+                int id = getIdentifier(name.identifier);
+                if (id==-1) return appendErrorInfo("Primary: Undefined identifier: " + name.identifier + ".", NRC);
+                add(IRINT(IR_FRAMEADDR, id));
+                add(IRSIM(IR_LOAD));
+            } else 
                 return appendErrorInfo("Primary: Undefined primary syntax.", node->row, node->column);
             break;
         }
@@ -237,7 +324,9 @@ bool MontConceiver::visit(MontNodePtr node) {
         case NK_STATEMENT: {
             switch (node->expansion) {
                 case NE_STATEMENT_EXPRESSION: { // expression Semicolon
-                    return visitChild(node, 0);
+                    flag = visitChild(node, 0);
+                    if (!flag) return false;
+                    add(IRSIM(IR_POP));
                     break;
                 }
                 case NE_STATEMENT_RETURN: { // Return expression Semicolon
@@ -246,9 +335,19 @@ bool MontConceiver::visit(MontNodePtr node) {
                     return flag;
                     break;
                 }
-                case NE_STATEMENT_VARDEFINE: { 
-                    // TODO var define
-                    return true;
+                case NE_STATEMENT_DECLARATION: { 
+                    return visitChild(node, 0);
+                    break;
+                }
+                case NE_STATEMENT_CODEBLOCK: {
+                    pushFrame(false);
+                    flag = visitChild(node, 1);
+                    popFrame();
+                    return flag;
+                    break;
+                }
+                case NE_STATEMENT_EMPTY: {
+                    return true; 
                     break;
                 }
                 default: {
@@ -308,4 +407,34 @@ ostream& operator <<(ostream& out, MontConceiver& con){
     for (int i=0;i<s;i++) 
         out << con.irs[i] << std::endl;
     return out;
+}
+
+void MontConceiver::pushIdentifier(string name, IdentifierType type){
+    int size = frames.size();
+    frames[size-1].push(name, type, variablePointer);
+    variablePointer++;
+}
+
+void MontConceiver::pushFrame(bool blocking){
+    if (blocking) variablePointer = 0;
+    frames.push_back(MontStackFrame(blocking));
+}
+
+void MontConceiver::popFrame(){
+    assert(frames.size() > 0);
+    int s = frames.size();
+    if (!frames[s-1].blocking) variablePointer-=frames[s-1].identifiers.size(); 
+    frames.pop_back();
+}
+
+int MontConceiver::getIdentifier(string name){
+    int fs = frames.size();
+    for (int i=fs-1;i>=0;i--) {
+        MontStackFrame& f = frames[i];
+        int s = f.identifiers.size();
+        for (int j=s-1;j>=0;j--) 
+            if (f.identifiers[j].name == name) return f.identifiers[j].location;
+        if (f.blocking) break;
+    }
+    return -1;
 }

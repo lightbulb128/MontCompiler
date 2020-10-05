@@ -22,6 +22,10 @@ MontNode::~MontNode(){
     children.clear();
 }
 
+// 应当保证再trystart和tryend调用之间不存在任何中途return。
+void MontNode::tryStart(){MontParser::tryStart();}
+void MontNode::tryEnd(){MontParser::tryEnd();}
+
 void MontNode::putback(MontLexer& lexer){
     int s = children.size();
     for (int i=s-1;i>=0;i--) {
@@ -41,6 +45,7 @@ void MontTokenNode::putback(MontLexer& lexer) {
 
 void MontNode::addChildren(Mnp p){
     // if (children.size()==0) {row=p->row; column=p->column;}
+    memorySize += p->memorySize;
     children.push_back(p);
 }
 
@@ -103,6 +108,10 @@ bool MontNode::tryParsePrimary(MontLexer& lexer){
         if (!ptr->tryParse(lexer, TK_LPAREN) || !ptr->tryParseExpression(lexer) 
             || !ptr->tryParse(lexer, TK_RPAREN)) 
             PARSEFAIL("Primary: Expect LParen expression RParen.");
+    } else if (token.tokenKind == TK_IDENTIFIER) { 
+        ptr->expansion = NE_PRIMARY_IDENTIFIER;
+        if (!ptr->tryParse(lexer, TK_IDENTIFIER))
+            PARSEFAIL("Primary: Expect identifier.");
     } else {
         ptr->expansion = NE_PRIMARY_VALUE;
         if (!ptr->tryParseValue(lexer)) 
@@ -258,7 +267,7 @@ bool MontNode::tryParseAdditive(MontLexer& lexer) {
 bool MontNode::tryParseExpression(MontLexer& lexer) {
     if (DEBUG) cout << "try parse expression " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_EXPRESSION;
-    if (!ptr->tryParseLogicalOr(lexer)) PARSEFAIL("Expression: Not valid logical_or.");
+    if (!ptr->tryParseAssignment(lexer)) PARSEFAIL("Expression: Not valid logical_or.");
     if (DEBUG) cout << "ok parsed expression" << endl;
     addChildren(ptr); return true;
 }
@@ -278,14 +287,52 @@ bool MontNode::tryParseType(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
+bool MontNode::tryParseDeclaration(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse declaration " << lexer.peek() << endl;
+    Token peek = lexer.peek();
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_DECLARATION; 
+    ptr->memorySize = 4;
+    if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER)) 
+        PARSEFAIL("Declaration: Expect type and identifier.");
+    peek = lexer.peek();
+    if (peek.tokenKind == TK_ASSIGN) {
+        ptr->expansion = NE_DECLARATION_INIT;
+        if (!ptr->tryParse(lexer, TK_ASSIGN) || !ptr->tryParseExpression(lexer)) 
+            PARSEFAIL("Declaration: Expect expression after assign mark.");
+    } else 
+        ptr->expansion = NE_DECLARATION_SIMPLE;
+    if (DEBUG) cout << "ok parsed declaration" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseAssignment(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse assignment " << lexer.peek() << endl;
+    Token peek = lexer.peek();
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_ASSIGNMENT;
+    bool successful = false;
+    tryStart();
+    if (peek.tokenKind == TK_IDENTIFIER) { // Identifier Assign expression
+        if (!ptr->tryParse(lexer, TK_IDENTIFIER) || !ptr->tryParse(lexer, TK_ASSIGN) || !ptr->tryParseExpression(lexer)) 
+            ptr->putback(lexer);
+        else successful = true, ptr->expansion = NE_ASSIGNMENT_ASSIGN;
+    }
+    if (!successful)  // logical_or
+        successful = ptr->tryParseLogicalOr(lexer), ptr->expansion = NE_ASSIGNMENT_VALUE;
+    tryEnd();
+    if (!successful) 
+        PARSEFAIL("Assignment: Invalid assignment. Expect logical_or or assignment expression.");
+    if (DEBUG) cout << "ok parsed assignment" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::tryParseStatement(MontLexer& lexer) {
     if (DEBUG) cout << "try parse statement " << lexer.peek() << endl;
     Token peek = lexer.peek();
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_STATEMENT;
     if (isTypeToken(peek)) {
-        ptr->expansion = NE_STATEMENT_VARDEFINE;
-        if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER) || !ptr->tryParse(lexer, TK_SEMICOLON))
-            PARSEFAIL("Statement: Illegal variable definition.");
+        ptr->expansion = NE_STATEMENT_DECLARATION;
+        if (!ptr->tryParseDeclaration(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON))
+            PARSEFAIL("Statement: Illegal variable declaration.");
         if (DEBUG) cout << "ok parsed statement vardefine" << endl;
         addChildren(ptr); return true;
     } else if (peek.tokenKind == TK_RETURN) {
@@ -294,14 +341,24 @@ bool MontNode::tryParseStatement(MontLexer& lexer) {
             PARSEFAIL("Statement: Illegal return statement.");
         if (DEBUG) cout << "ok parsed return statement" << endl;
         addChildren(ptr); return true;
-    } else {
+    } else if (peek.tokenKind == TK_SEMICOLON) {
+        ptr->tryParse(lexer, TK_SEMICOLON); ptr->expansion = NE_STATEMENT_EMPTY;
+        if (DEBUG) cout << "ok parsed statement empty" << endl;
+        addChildren(ptr); return true;  
+    } else if (peek.tokenKind == TK_LBRACE) {
+        ptr->expansion = NE_STATEMENT_CODEBLOCK;
+        if (!ptr->tryParseCodeblock(lexer)) 
+            PARSEFAIL("Statement: Expect codeblock with LBrace.");
+        if (DEBUG) cout << "ok parsed statement codeblock" << endl;
+        addChildren(ptr); return true;
+    } else  {
         ptr->expansion = NE_STATEMENT_EXPRESSION;
         if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
             PARSEFAIL("Statement: Illegal expresion statement.");
         if (DEBUG) cout << "ok parsed expression statement" << endl;
         addChildren(ptr); return true;
     }
-} 
+}
 
 bool MontNode::tryParseCodeblock(MontLexer& lexer){
     if (DEBUG) cout << "try parse codeblock " << lexer.peek() << endl;
@@ -351,13 +408,16 @@ bool MontParser::parse(MontLexer& lexer) {
 }
 
 ostream& operator <<(ostream& stream, MontParser& parser) {
-    parser.program->output(0, stream);
+    parser.program->output("", true, stream);
     return stream;
 }
 
-void MontNode::output(int tabcount, ostream& out) {
-    string sp = ""; for (int i=0;i<tabcount;i++) sp+="    ";
-    out << sp;
+void MontNode::output(string tab, bool lastchild, ostream& out) {
+    if (kind==NK_ROOT) {
+        children[0]->output(tab, lastchild, out);
+        return;
+    }
+    out << tab; out << "o---";
     if (kind==NK_TOKEN) {
         MontTokenNode* n = (MontTokenNode*) this;
         out << (*n).getToken() << endl;
@@ -367,7 +427,7 @@ void MontNode::output(int tabcount, ostream& out) {
     switch (kind) {
         case NK_ROOT:       out << "root"; break;
         case NK_PROGRAM:    out << "program"; break;
-        case NK_FUNCTION:   out << "function"; break;
+        case NK_FUNCTION:   out << "function [frameSize=" << memorySize << "]"; break;
         case NK_CODEBLOCK:  out << "codeblock"; break;
         case NK_STATEMENT:  out << "statement"; break;
         case NK_EXPRESSION: out << "expression"; break;
@@ -381,11 +441,47 @@ void MontNode::output(int tabcount, ostream& out) {
         case NK_EQUALITY:   out << "equality"; break;
         case NK_RELATIONAL: out << "relational"; break;
         case NK_PRIMARY:    out << "primary"; break;
+        case NK_ASSIGNMENT: out << "assignment"; break;
+        case NK_DECLARATION:out << "declaration"; break;
         case NK_UNDEFINED:  out << "undefined"; break;
+        default: out << "???"; break;
+    }
+    if (expansion != NE_NONE) out << " - ";
+    switch (expansion) {
+        case NE_ADDITIVE_LEAF: out << "leaf"; break;
+        case NE_ADDITIVE_INNER: out << "inner"; break;
+        case NE_ASSIGNMENT_ASSIGN: out << "assign"; break;
+        case NE_ASSIGNMENT_VALUE: out << "value"; break;
+        case NE_DECLARATION_INIT: out << "init"; break;
+        case NE_DECLARATION_SIMPLE: out << "simple"; break;
+        case NE_EQUALITY_INNER: out << "inner"; break;
+        case NE_EQUALITY_LEAF: out << "leaf"; break;
+        case NE_LAND_INNER: out << "inner"; break;
+        case NE_LAND_LEAF: out << "leaf"; break;
+        case NE_LOR_INNER: out << "inner"; break;
+        case NE_LOR_LEAF: out << "leaf"; break;
+        case NE_MULTIPLICATIVE_INNER: out << "inner"; break;
+        case NE_MULTIPLICATIVE_LEAF: out << "leaf"; break;
+        case NE_PRIMARY_IDENTIFIER: out << "identifier"; break;
+        case NE_PRIMARY_PAREN: out << "paren"; break;
+        case NE_PRIMARY_VALUE: out << "value"; break;
+        case NE_RELATIONAL_INNER: out << "inner"; break;
+        case NE_RELATIONAL_LEAF: out << "leaf"; break;
+        case NE_STATEMENT_DECLARATION: out << "declaration"; break;
+        case NE_STATEMENT_EMPTY: out << "empty"; break;
+        case NE_STATEMENT_EXPRESSION: out << "expression"; break;
+        case NE_STATEMENT_RETURN: out << "return"; break;
+        case NE_STATEMENT_CODEBLOCK: out << "codeblock"; break;
+        case NE_UNARY_OPERATION: out << "operation"; break;
+        case NE_UNARY_PRIMARY: out << "primary"; break;
     }
     //out << " {" << endl;
     out << endl;
-    for (auto child : children) 
-        child->output(tabcount+1, out);
+    int cnt = children.size();
+    string newtab = tab + (lastchild ? "    " : "|   ");
+    for (int i=0;i<cnt-1;i++) 
+        children[i]->output(newtab, false, out);
+    if (cnt>0)
+        children[cnt-1]->output(newtab, true, out);
     //out << sp << "}" << endl;
 }

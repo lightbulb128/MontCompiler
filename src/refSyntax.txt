@@ -1,11 +1,17 @@
 program     :   function EOF
 function    :   type Identifier LParen RParen codeblock
 codeblock   :   LBrace (statement)* RBrace
-statement   :   type Identifier Semicolon             STATEMENT_VARDEFINE
+statement   :   declaration Semicolon                 STATEMENT_DECLARATION
             |   expression Semicolon                  STATEMENT_EXPRESSION
             |   Return expression Semicolon           STATEMENT_RETURN
+            |   Semicolon                             STATEMENT_EMPTY
+            |   codeblock                             STATEMENT_CODEBLOCK
+declaration :   type Identifier                       DECLARATION_SIMPLE
+            |   type Identifier Assign expression     DECLARATION_INIT
 type        :   Integer | Char
-expression  :   logical_or
+expression  :   assignment
+assignment  :   logical_or                            ASSIGNMENT_VALUE
+            |   Identifier Assign expression          ASSIGNMENT_ASSIGN
 logical_or  :   logical_and                           LOR_LEAF
             |   logical_or Or logical_and             LOR_INNER
 logical_and :   equality                              LAND_LEAF   
@@ -22,4 +28,5 @@ unary       :   primary                               UNARY_PRIMARY
             |   (Exclamation|Tilde|Minus) unary       UNARY_OPERATOR
 primary     :   value                                 PRIMARY_VALUE
             |   LParen expression RParen              PRIMARY_PAREN
+            |   Identifier                            PRIMARY_IDENTIFIER
 value       :   CharValue | IntValue

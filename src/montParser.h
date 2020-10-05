@@ -32,18 +32,23 @@ enum MontNodeKind {
     NK_TYPE,
     NK_VALUE,
     NK_TOKEN,
+    NK_DECLARATION, 
+    NK_ASSIGNMENT, 
     NK_UNDEFINED
 };
 
 enum MontNodeExpansion {
     NE_NONE, 
-    NE_STATEMENT_VARDEFINE,
+    NE_STATEMENT_DECLARATION,
     NE_STATEMENT_EXPRESSION,
     NE_STATEMENT_RETURN,
+    NE_STATEMENT_CODEBLOCK,
+    NE_STATEMENT_EMPTY,
     NE_UNARY_PRIMARY,
     NE_UNARY_OPERATION,
     NE_PRIMARY_VALUE,
     NE_PRIMARY_PAREN,
+    NE_PRIMARY_IDENTIFIER,
     NE_MULTIPLICATIVE_LEAF,
     NE_MULTIPLICATIVE_INNER,
     NE_ADDITIVE_LEAF,
@@ -55,7 +60,11 @@ enum MontNodeExpansion {
     NE_EQUALITY_INNER,
     NE_EQUALITY_LEAF,
     NE_RELATIONAL_LEAF,
-    NE_RELATIONAL_INNER
+    NE_RELATIONAL_INNER,
+    NE_DECLARATION_SIMPLE,
+    NE_DECLARATION_INIT,
+    NE_ASSIGNMENT_VALUE,
+    NE_ASSIGNMENT_ASSIGN
 };
 
 class MontNode {
@@ -66,16 +75,22 @@ protected:
     vector<MontNodePtr> children;
     // static string errorInfo;
     int row, column;
+    int memorySize; 
+    // 用于生成栈帧，表示该树节点对应代码中所需要声明局部变量的大小（一定是4的倍数），
+    // 例如 if () {A} else {B} 中 memorySize 应当是 A B 中所声明局部变量空间中的较大值。
 public:
     MontNode(MontLexer& lexer){
         children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
         lexer.peek(); row = lexer.getCurrentRow(); column = lexer.getCurrentColumn();
+        memorySize = 0;
     }
     MontNode(){
         children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
-        row = column = 0;
+        row = column = 0; memorySize = 0;
         //lexer.peek(); row = lexer.getCurrentRow(); column = lexer.getCurrentColumn();
     }
+    static void tryStart();
+    static void tryEnd();
     void copyRC(MontNode& from) {row=from.row; column=from.column;}
     MontNodeKind getKind(){return kind;}
     void setKind(MontNodeKind k){kind=k;}
@@ -107,7 +122,9 @@ public:
     bool tryParseCodeblock(MontLexer& lexer);
     bool tryParseFunction(MontLexer& lexer); 
     bool tryParseProgram(MontLexer& lexer);
-    void output(int tabcount, std::ostream& stream);
+    bool tryParseDeclaration(MontLexer& lexer);
+    bool tryParseAssignment(MontLexer& lexer);
+    void output(string tab, bool lastchild, std::ostream& stream);
 };
 
 // store nothing in children.
@@ -118,7 +135,7 @@ private:
 public:
     MontTokenNode(Token tk){
         requirement = tk.tokenKind; token = tk; kind = NK_TOKEN;
-        row = tk.row; column = tk.column;
+        row = tk.row; column = tk.column; memorySize = 0;
     }
     void putback(MontLexer& lexer) override;
     Token getToken(){return token;}
@@ -127,7 +144,7 @@ public:
 class MontParser {
     friend class MontConceiver;
 private:
-    static MontLog logger;
+    static MontLog logger; 
     MontNodePtr program;
 public:
     MontParser();
@@ -140,6 +157,8 @@ public:
     }
     static string getErrorInfo(){return logger.get();}
     static void resetErrorInfo(){logger.clear();}
+    static void tryStart(){logger.trystart();}
+    static void tryEnd(){logger.tryend();}
 };
 
 #endif
