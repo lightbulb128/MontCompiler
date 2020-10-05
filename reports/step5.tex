@@ -65,6 +65,8 @@
                 ，自动生成 \T{PUSH 0} 和 \T{RET} 语句。
             \end{itemize}
 
+            在此步骤中同时检查变量的声明是否重复以及使用变量是是否已经定义。
+
             \paragraph{4 产生汇编代码} 新的或修改的中间代码将生成对应的汇编代码：
             \begin{itemize}
                 \item[*] \T{[BUILDFRAME]} \T{sw ra, -4(sp); sw fp, -8(sp); ori fp, sp, 0; addi sp, sp, -8+4*k;}
