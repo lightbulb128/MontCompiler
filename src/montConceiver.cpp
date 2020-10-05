@@ -173,6 +173,9 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_DECLARATION: { // type Identifier [Assign Expression]
             Token name = getTokenChild(node, 1);
+            int id = getIdentifier(name.identifier);
+            if (id!=-1) 
+                return appendErrorInfo("Declaration: Variable redeclared: " + name.identifier + ".", NRC);
             pushIdentifier(name.identifier, IT_VARIABLE);
             if (node->expansion == NE_DECLARATION_INIT) {
                 flag = visitChild(node, 3);
@@ -180,7 +183,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             } else if (node->expansion == NE_DECLARATION_SIMPLE) 
                 add(IRINT(IR_PUSH, 0));
             else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
-            int id = getIdentifier(name.identifier);
+            id = getIdentifier(name.identifier);
             add(IRINT(IR_FRAMEADDR, id));
             add(IRSIM(IR_STORE));
             add(IRSIM(IR_POP));
