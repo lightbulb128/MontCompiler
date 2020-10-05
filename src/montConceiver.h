@@ -98,6 +98,7 @@ private:
     void pushFrame(bool blocking);
     void popFrame();
     int getIdentifier(string name); // 未查询到结果时返回-1，查询到结果应当为声明该变量时对应的variablePointer
+    int checkRedeclaration(string name); // 仅查询本块内，即本frame中的
 public:
     static string getErrorInfo(){return logger.get();}
     void add(MontIntermediate m){irs.push_back(m);}

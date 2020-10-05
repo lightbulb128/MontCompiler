@@ -173,7 +173,7 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_DECLARATION: { // type Identifier [Assign Expression]
             Token name = getTokenChild(node, 1);
-            int id = getIdentifier(name.identifier);
+            int id = checkRedeclaration(name.identifier);
             if (id!=-1) 
                 return appendErrorInfo("Declaration: Variable redeclared: " + name.identifier + ".", NRC);
             pushIdentifier(name.identifier, IT_VARIABLE);
@@ -439,5 +439,14 @@ int MontConceiver::getIdentifier(string name){
             if (f.identifiers[j].name == name) return f.identifiers[j].location;
         if (f.blocking) break;
     }
+    return -1;
+}
+
+int MontConceiver::checkRedeclaration(string name){
+    int fs = frames.size();
+    MontStackFrame& f = frames[fs-1];
+    int s = f.identifiers.size();
+    for (int j=s-1;j>=0;j--) 
+        if (f.identifiers[j].name == name) return f.identifiers[j].location;
     return -1;
 }
