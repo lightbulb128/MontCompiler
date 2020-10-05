@@ -1,0 +1,97 @@
+\documentclass[UTF8]{ctexart}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{subfigure}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{diagbox}
+\usepackage{bm}
+\usepackage{color}
+
+\usepackage{enumitem}
+\setitemize[1]{itemsep=0pt, partopsep=0pt, parsep=\parskip, topsep=5pt}
+
+\usepackage{listings}
+\lstdefinestyle{lfonts}{
+    basicstyle = \ttfamily
+}
+
+\newcommand{\T}[1]{\texttt{{#1}}}
+\title{Step 4 Report}
+\author{刘轩奇 2018011025}
+\date{2020年10月5日}
+\geometry{left=2.0cm, right=2.0cm, top=2.5cm, bottom=2.5cm}
+\begin{document}
+    \maketitle
+    \section{工作内容}
+        本人选择不使用辅助工具 ANTLR 因此自己实现了 lexer 和 parser。
+        \subsection{文件说明} 
+            \T{montLexer.h/cpp} 词法分析器；
+
+            \T{montParser.h/cpp} 语法分析器；
+
+            \T{montConceiver.h/cpp} 产生中间代码；
+
+            \T{montAssembler.h/cpp} 从中间代码产生汇编代码；
+            
+            \T{montLog.h} 记录编译错误信息；
+
+            \T{montCompiler.cpp} MiniDecaf 编译器，包含主函数，编译成功返回 0 否则返回 -1，
+            并将错误信息输出到 \T{std::cerr}。
+        
+        \subsection{本步骤完成的工作}
+
+            \paragraph{1 词法分析} 添加了以下新的 Token：
+            \begin{itemize}
+                \item[*] \T{EQUAL} 等号
+                \item[*] \T{NOT\_EQUAL} 不等号
+                \item[*] \T{GREATER} 大于号
+                \item[*] \T{GREATER\_EQUAL} 大于等于号
+                \item[*] \T{LESS} 小于号
+                \item[*] \T{LESS\_EQUAL} 小于等于号
+                \item[*] \T{LAND} 逻辑与
+                \item[*] \T{LOR} 逻辑或
+            \end{itemize}
+
+            \paragraph{2 句法分析} 修改了 \T{expression} 节点的生成逻辑，并添加了以下新的 AST 节点，对应于指导书给出的非终结符：
+            \begin{itemize}
+                \item[*] \T{logical\_and}
+                \item[*] \T{logical\_or}
+                \item[*] \T{equality}
+                \item[*] \T{relational}    
+            \end{itemize}
+
+            \paragraph{3 产生中间代码} 按照指导书上的说明，将对应符号分别生成对应的
+            中间代码：
+            \begin{itemize}
+                \item[*] \T{EQ, NEQ}
+                \item[*] \T{LT, GT, LE, GE}
+                \item[*] \T{LAND, LOR}
+            \end{itemize}
+
+            \paragraph{4 产生汇编代码} 新的中间代码将生成对应的汇编代码（省略了载入操作数和存储结果的语句）：
+            \begin{itemize}
+                \item[*] \T{[EQ]} \T{sub t1,t1,t2; seqz t1,t1;}
+                \item[*] \T{[NEQ]} \T{sub t1,t1,t2; snez t1,t1;}
+                \item[*] \T{[LE]} \T{sgt t1,t1,t2; xori t1,t1,1;}
+                \item[*] \T{[LT]} \T{slt t1,t1,t2;}
+                \item[*] \T{[GE]} \T{slt t1,t1,t2; xori t1,t1,1;}
+                \item[*] \T{[GT]} \T{sgt t1,t1,t2;}
+                \item[*] \T{[LAND]} \T{snez t1,t1; snez t2,t2; and t1,t1,t2;}
+                \item[*] \T{[LOR]} \T{or t1,t1,t2; snez t1,t1;}         
+            \end{itemize}
+        
+    \section{思考题}
+        \paragraph{1} 在表达式计算时，对于某一步运算，是否一定要先计算出所有的操作数的结果才能进行运算？
+        \paragraph{答} 并非如此。例如计算逻辑或时，若首个操作数为真，则结果必为真，无需再计算第二个操作数的
+        值。但在本次实验中，并未要求实现这种短路功能。
+        \paragraph{2} 在 MiniDecaf 中，我们对于短路求值未做要求，但在包括 C 语言的大多数流行的
+        语言中，短路求值都是被支持的。为何这一特性广受欢迎？你认为短路求值这一特性会
+        给程序员带来怎样的好处？
+        \paragraph{答} 一方面，短路特性能够提高程序运行的效率，当第一个操作数已经能决定
+        运算结果时，不用再计算第二个操作数的值；另一方面，可以利用这种特性进行程序流程
+        控制，使得程序更加简洁。
+        例如希望第一个过程执行成功时不再执行第二个过程，这时就可以利用逻辑或
+        的短路特性，这正是给程序员带来的便利之处。
+\end{document}

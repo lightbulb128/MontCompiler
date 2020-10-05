@@ -85,6 +85,15 @@ bool MontNode::isMultiplicativeOperatorToken(Token& t){
         || (t.tokenKind == TK_PERCENT);
 }
 
+bool MontNode::isEqualityOperatorToken(Token& t){
+    return (t.tokenKind == TK_EQUAL || t.tokenKind == TK_NOT_EQUAL);
+}
+
+bool MontNode::isRelationalOperatorToken(Token& t) {
+    return (t.tokenKind == TK_LESS || t.tokenKind == TK_LESS_EQUAL 
+        || t.tokenKind == TK_GREATER || t.tokenKind == TK_GREATER_EQUAL);
+}
+
 bool MontNode::tryParsePrimary(MontLexer& lexer){
     if (DEBUG) cout << "try parse primary " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_PRIMARY;
@@ -120,7 +129,90 @@ bool MontNode::tryParseUnary(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
-// This is not a recursive procedure
+bool MontNode::tryParseRelational(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse relational " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_RELATIONAL;
+    ptr->expansion = NE_RELATIONAL_LEAF;
+    if (!ptr->tryParseAdditive(lexer)) 
+        PARSEFAIL("Relational: Expect additive syntax.");
+    Token token = lexer.peek();
+    while (isRelationalOperatorToken(token)) {
+        Mnp newptr = new MontNode(); newptr->kind = NK_RELATIONAL;
+        newptr->expansion = NE_RELATIONAL_INNER;
+        newptr->copyRC(*ptr);
+        newptr->addChildren(ptr); ptr = newptr;
+        ptr->tryParse(lexer, token.tokenKind);
+        if (!ptr->tryParseAdditive(lexer)) 
+            PARSEFAIL("Relational: Expect additive syntax after operator.");
+        token = lexer.peek();
+    }
+    if (DEBUG) cout << "ok parsed relational" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseEquality(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse equality " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_EQUALITY;
+    ptr->expansion = NE_EQUALITY_LEAF;
+    if (!ptr->tryParseRelational(lexer)) 
+        PARSEFAIL("Equality: Expect relational syntax.");
+    Token token = lexer.peek();
+    while (isEqualityOperatorToken(token)) {
+        Mnp newptr = new MontNode(); newptr->kind = NK_EQUALITY;
+        newptr->expansion = NE_EQUALITY_INNER;
+        newptr->copyRC(*ptr);
+        newptr->addChildren(ptr); ptr = newptr;
+        ptr->tryParse(lexer, token.tokenKind);
+        if (!ptr->tryParseRelational(lexer)) 
+            PARSEFAIL("Equality: Expect relational syntax after operator.");
+        token = lexer.peek();
+    }
+    if (DEBUG) cout << "ok parsed equality" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseLogicalAnd(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse logical_and " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_LOGICAL_AND;
+    ptr->expansion = NE_LAND_LEAF;
+    if (!ptr->tryParseEquality(lexer)) 
+        PARSEFAIL("Logical and: Expect equality syntax.");
+    Token token = lexer.peek();
+    while (token.tokenKind == TK_LAND) {
+        Mnp newptr = new MontNode(); newptr->kind = NK_LOGICAL_AND;
+        newptr->expansion = NE_LAND_INNER;
+        newptr->copyRC(*ptr);
+        newptr->addChildren(ptr); ptr = newptr;
+        ptr->tryParse(lexer, token.tokenKind);
+        if (!ptr->tryParseEquality(lexer)) 
+            PARSEFAIL("Logical and: Expect equality syntax after operator.");
+        token = lexer.peek();
+    }
+    if (DEBUG) cout << "ok parsed logical_and" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseLogicalOr(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse logical_or " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_LOGICAL_OR;
+    ptr->expansion = NE_LOR_LEAF;
+    if (!ptr->tryParseLogicalAnd(lexer)) 
+        PARSEFAIL("Logical or: Expect logical_and syntax.");
+    Token token = lexer.peek();
+    while (token.tokenKind == TK_LOR) {
+        Mnp newptr = new MontNode(); newptr->kind = NK_LOGICAL_OR;
+        newptr->expansion = NE_LOR_INNER;
+        newptr->copyRC(*ptr);
+        newptr->addChildren(ptr); ptr = newptr;
+        ptr->tryParse(lexer, token.tokenKind);
+        if (!ptr->tryParseLogicalAnd(lexer)) 
+            PARSEFAIL("Logical or: Expect logical_and syntax after operator.");
+        token = lexer.peek();
+    }
+    if (DEBUG) cout << "ok parsed logical_or" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::tryParseMultiplicative(MontLexer& lexer) {
     if (DEBUG) cout << "try parse multiplicative " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_MULTIPLICATIVE;
@@ -166,7 +258,7 @@ bool MontNode::tryParseAdditive(MontLexer& lexer) {
 bool MontNode::tryParseExpression(MontLexer& lexer) {
     if (DEBUG) cout << "try parse expression " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_EXPRESSION;
-    if (!ptr->tryParseAdditive(lexer)) PARSEFAIL("Expression: Not valid additive.");
+    if (!ptr->tryParseLogicalOr(lexer)) PARSEFAIL("Expression: Not valid logical_or.");
     if (DEBUG) cout << "ok parsed expression" << endl;
     addChildren(ptr); return true;
 }
@@ -284,6 +376,10 @@ void MontNode::output(int tabcount, ostream& out) {
         case NK_UNARY:      out << "unary"; break;
         case NK_MULTIPLICATIVE: out << "multiplicative"; break;
         case NK_ADDITIVE:   out << "additive"; break;
+        case NK_LOGICAL_AND:out << "logical_and"; break;
+        case NK_LOGICAL_OR: out << "logical_or"; break;
+        case NK_EQUALITY:   out << "equality"; break;
+        case NK_RELATIONAL: out << "relational"; break;
         case NK_PRIMARY:    out << "primary"; break;
         case NK_UNDEFINED:  out << "undefined"; break;
     }

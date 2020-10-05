@@ -49,12 +49,16 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_ERROR: stream << "Error"; break;
         case TK_EXCLAMATION: stream << "Exclamation !"; break;
         case TK_TILDE: stream << "Tilde ~"; break;
-        case TK_NOTEQUAL: stream << "Not equal !="; break;
+        case TK_NOT_EQUAL: stream << "Not equal !="; break;
         case TK_MINUS: stream << "Minus -"; break;
         case TK_PLUS: stream << "Plus +"; break;
         case TK_ASTERISK: stream << "Asterisk *"; break;
         case TK_LSLASH: stream << "LSlash /"; break;
         case TK_PERCENT: stream << "Percentage %"; break;
+        case TK_AND: stream << "And &"; break;
+        case TK_OR: stream << "Or |"; break;
+        case TK_LAND: stream << "Logical and &&"; break;
+        case TK_LOR: stream << "Logical or ||"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -170,18 +174,18 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                 break;
             case '>':
                 if (peek=='=') {currentToken = Token(TK_GREATER_EQUAL); return TR_PEEKUSED_FINISHED;}
-                else if (peek='>') {currentToken = Token(TK_RIGHT_SHIFT); return TR_PEEKUSED_FINISHED;}
+                else if (peek=='>') {currentToken = Token(TK_RIGHT_SHIFT); return TR_PEEKUSED_FINISHED;}
                 else {currentToken = Token(TK_GREATER); return TR_FINISHED;}
                 break;
             case '<':
                 if (peek=='=') {currentToken = Token(TK_LESS_EQUAL); return TR_PEEKUSED_FINISHED;}
-                else if (peek='>') {currentToken = Token(TK_LEFT_SHIFT); return TR_PEEKUSED_FINISHED;}
+                else if (peek=='>') {currentToken = Token(TK_LEFT_SHIFT); return TR_PEEKUSED_FINISHED;}
                 else {currentToken = Token(TK_LESS); return TR_FINISHED;}
                 break;
             case '-':
                 currentToken = Token(TK_MINUS); return TR_FINISHED; break;
             case '!':
-                if (peek=='=') {currentToken = Token(TK_NOTEQUAL); return TR_PEEKUSED_FINISHED;}
+                if (peek=='=') {currentToken = Token(TK_NOT_EQUAL); return TR_PEEKUSED_FINISHED;}
                 else {currentToken = Token(TK_EXCLAMATION); return TR_FINISHED;}
                 break;
             case '~':
@@ -194,6 +198,14 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                 currentToken = Token(TK_LSLASH); return TR_FINISHED; break;
             case '%':
                 currentToken = Token(TK_PERCENT); return TR_FINISHED; break;
+            case '|':
+                if (peek=='|') {currentToken = Token(TK_LOR); return TR_PEEKUSED_FINISHED;}
+                else {currentToken = Token(TK_OR); return TR_FINISHED;}
+                break;
+            case '&':
+                if (peek=='&') {currentToken = Token(TK_LAND); return TR_PEEKUSED_FINISHED;}
+                else {currentToken = Token(TK_AND); return TR_FINISHED;}
+                break;
             default:
                 flagSymbol = false;
         }

@@ -5,6 +5,7 @@
 #define IRSIM(c) (MontIntermediate::simple(c))
 #define IRINT(c, v) (MontIntermediate::intcode(c, v))
 #define INSTR(c, s) (MontIntermediate::strcode(c, s))
+#define NRC node->row, node->column
 
 MontLog MontConceiver::logger = MontLog();
 
@@ -14,9 +15,17 @@ string MontIntermediate::toString(){
     switch (code) {
         case IR_ADD: return "ADD";
         case IR_DIV: return "DIV";
+        case IR_EQ: return "EQ";
+        case IR_GE: return "GE";
+        case IR_GT: return "GT";
+        case IR_LAND: return "LAND";
+        case IR_LE: return "LE";
         case IR_LNOT: return "LNOT";
+        case IR_LOR: return "LOR";
+        case IR_LT: return "LT";
         case IR_MUL: return "MUL";
         case IR_NEG: return "NEG";
+        case IR_NEQ: return "NEQ";
         case IR_NOT: return "NOT";
         case IR_PUSH: return string("PUSH ") + to_string(num);
         case IR_REM: return "REM";
@@ -32,19 +41,35 @@ string MontIntermediate::toAssembly(){
             return string("lw t1, 4(sp)\nlw t2, 0(sp)\nadd t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
         case IR_DIV:
             return string("lw t1, 4(sp)\nlw t2, 0(sp)\ndiv t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_LNOT: // lw t1,0(sp); seqz t1,t1; sw t1,0(sp)
+        case IR_EQ:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsub t1, t1, t2\nseqz t1, t1\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_GE:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nslt t1, t1, t2\nxori t1, t1, 1\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_GT:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsgt t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_LAND:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsnez t1, t1\nsnez t2, t2\nand t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_LE:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsgt t1, t1, t2\nxori t1, t1, 1\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_LNOT: 
             return string("lw t1, 0(sp)\nseqz t1,t1\nsw t1,0(sp)\n");
+        case IR_LOR:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nor t1, t1, t2\nsnez t1, t1\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_LT:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nslt t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
         case IR_MUL:
             return string("lw t1, 4(sp)\nlw t2, 0(sp)\nmul t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_NEG: // lw t1,0(sp); neg t1,t1; sw t1,0(sp)
+        case IR_NEG: 
             return string("lw t1, 0(sp)\nneg t1,t1\nsw t1,0(sp)\n");
-        case IR_NOT: // lw t1,0(sp); not t1,t1; sw t1,0(sp)
+        case IR_NEQ:
+            return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsub t1, t1, t2\nsnez t1, t1\naddi sp, sp, 4\nsw t1, 0(sp)");
+        case IR_NOT: 
             return string("lw t1, 0(sp)\nnot t1,t1\nsw t1,0(sp)\n");
-        case IR_PUSH: // addi sp, sp, -4 ; li t1, X ; sw t1, 0(sp)
+        case IR_PUSH: 
             return string("addi sp, sp, -4\nli t1, ") + to_string(num) + "\nsw t1, 0(sp)\n";
         case IR_REM:
             return string("lw t1, 4(sp)\nlw t2, 0(sp)\nrem t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
-        case IR_RET:  // lw a0, 0(sp) ; addi sp, sp, 4 ; jr ra
+        case IR_RET:  
             return string("lw a0, 0(sp)\naddi sp, sp, 4\njr ra\n");
         case IR_SUB:
             return string("lw t1, 4(sp)\nlw t2, 0(sp)\nsub t1, t1, t2\naddi sp, sp, 4\nsw t1, 0(sp)");
@@ -94,6 +119,23 @@ bool MontConceiver::visit(MontNodePtr node) {
             return visitChildren(node);
             break;
         }
+        case NK_EQUALITY: {
+            if (node->expansion == NE_EQUALITY_LEAF) 
+                return visitChild(node,0);
+            else if (node->expansion == NE_EQUALITY_INNER) {
+                if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
+                Token op = getTokenChild(node, 1);
+                if (op.tokenKind == TK_EQUAL)
+                    add(IRSIM(IR_EQ));
+                else if (op.tokenKind == TK_NOT_EQUAL)
+                    add(IRSIM(IR_NEQ));
+                else return appendErrorInfo("Equality: Expect operator ==, != token.", node->row, node->column);
+                return true;
+            }
+            else
+                return appendErrorInfo("Equality: Undefined equality syntax.", node->row, node->column);
+            break;
+        }
         case NK_EXPRESSION: {
             return visitChild(node, 0);
             break;
@@ -103,6 +145,36 @@ bool MontConceiver::visit(MontNodePtr node) {
             if (identifier.identifier!="main") 
                 return appendErrorInfo("Function: Function name not 'main'.", node);
             return visitChild(node, 4);
+            break;
+        }
+        case NK_LOGICAL_AND: {
+            if (node->expansion == NE_LAND_LEAF) 
+                return visitChild(node,0);
+            else if (node->expansion == NE_LAND_INNER) {
+                if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
+                Token op = getTokenChild(node, 1);
+                if (op.tokenKind == TK_LAND)
+                    add(IRSIM(IR_LAND));
+                else return appendErrorInfo("Logical and: Expect operator && token.", node->row, node->column);
+                return true;
+            }
+            else
+                return appendErrorInfo("Logical and: Undefined logical_and syntax.", node->row, node->column);
+            break;
+        }
+        case NK_LOGICAL_OR: {
+            if (node->expansion == NE_LOR_LEAF) 
+                return visitChild(node,0);
+            else if (node->expansion == NE_LOR_INNER) {
+                if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
+                Token op = getTokenChild(node, 1);
+                if (op.tokenKind == TK_LOR)
+                    add(IRSIM(IR_LOR));
+                else return appendErrorInfo("Logical or: Expect operator || token.", node->row, node->column);
+                return true;
+            }
+            else
+                return appendErrorInfo("Logical or: Undefined logical_or syntax.", node->row, node->column);
             break;
         }
         case NK_MULTIPLICATIVE: {
@@ -135,6 +207,27 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_PROGRAM: {
             return visitChild(node, 0);
+            break;
+        }
+        case NK_RELATIONAL: {
+            if (node->expansion == NE_RELATIONAL_LEAF) 
+                return visitChild(node,0);
+            else if (node->expansion == NE_RELATIONAL_INNER) {
+                if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
+                Token op = getTokenChild(node, 1);
+                if (op.tokenKind == TK_GREATER)
+                    add(IRSIM(IR_GT));
+                else if (op.tokenKind == TK_GREATER_EQUAL)
+                    add(IRSIM(IR_GE));
+                else if (op.tokenKind == TK_LESS) 
+                    add(IRSIM(IR_LT));
+                else if (op.tokenKind == TK_LESS_EQUAL)
+                    add(IRSIM(IR_LE));
+                else return appendErrorInfo("Relational: Expect operator >, >=, <, <= token.", node->row, node->column);
+                return true;
+            }
+            else
+                return appendErrorInfo("Relational: Undefined relational syntax.", node->row, node->column);
             break;
         }
         case NK_ROOT: {

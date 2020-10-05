@@ -21,6 +21,10 @@ enum MontNodeKind {
     NK_CODEBLOCK,
     NK_STATEMENT, 
     NK_EXPRESSION,
+    NK_LOGICAL_OR,
+    NK_LOGICAL_AND,
+    NK_EQUALITY,
+    NK_RELATIONAL,
     NK_ADDITIVE,
     NK_MULTIPLICATIVE,
     NK_PRIMARY, 
@@ -43,7 +47,15 @@ enum MontNodeExpansion {
     NE_MULTIPLICATIVE_LEAF,
     NE_MULTIPLICATIVE_INNER,
     NE_ADDITIVE_LEAF,
-    NE_ADDITIVE_INNER
+    NE_ADDITIVE_INNER,
+    NE_LOR_LEAF,
+    NE_LOR_INNER,
+    NE_LAND_LEAF,
+    NE_LAND_INNER,
+    NE_EQUALITY_INNER,
+    NE_EQUALITY_LEAF,
+    NE_RELATIONAL_LEAF,
+    NE_RELATIONAL_INNER
 };
 
 class MontNode {
@@ -77,6 +89,12 @@ public:
     bool tryParseValue(MontLexer& lexer);
     static bool isUnaryOperatorToken(Token& t);
     bool tryParseUnary(MontLexer& lexer);
+    static bool isEqualityOperatorToken(Token& t);
+    static bool isRelationalOperatorToken(Token& t);
+    bool tryParseEquality(MontLexer& lexer);
+    bool tryParseRelational(MontLexer& lexer);
+    bool tryParseLogicalOr(MontLexer& lexer);
+    bool tryParseLogicalAnd(MontLexer& lexer);
     static bool isAdditiveOperatorToken(Token& t);
     bool tryParseAdditive(MontLexer& lexer);
     static bool isMultiplicativeOperatorToken(Token& t);

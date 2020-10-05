@@ -24,7 +24,15 @@ enum IntermediateType {
     IR_SUB,
     IR_MUL,
     IR_DIV,
-    IR_REM
+    IR_REM,
+    IR_EQ,
+    IR_NEQ,
+    IR_LT,
+    IR_GT,
+    IR_LE,
+    IR_GE,
+    IR_LAND,
+    IR_LOR
 };
 
 struct MontIntermediate {

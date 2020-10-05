@@ -5,7 +5,15 @@ statement   :   type Identifier Semicolon             STATEMENT_VARDEFINE
             |   expression Semicolon                  STATEMENT_EXPRESSION
             |   Return expression Semicolon           STATEMENT_RETURN
 type        :   Integer | Char
-expression  :   additive
+expression  :   logical_or
+logical_or  :   logical_and                           LOR_LEAF
+            |   logical_or Or logical_and             LOR_INNER
+logical_and :   equality                              LAND_LEAF   
+            |   logical_and And equality              LAND_INNER
+equality    :   relational                            EQUALITY_LEAF
+            |   equality (Equal|NotEqual) relational  EQUALITY_INNER
+relational  :   additive                              RELATIONAL_LEAF
+            |   relational (G|L|GE|LE) additive       RELATIONAL_INNER
 additive    :   multiplicative                        ADDITIVE_LEAF
             |   multiplicative (Plus|Minus) additive  ADDITIVE_INNER
 multiplica  :   unary                                           MULTI_LEAF
