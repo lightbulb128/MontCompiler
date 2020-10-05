@@ -4,4 +4,6 @@
 /src/test.exe
 /src/test
 /src/log.txt
+/src/.vscode
+.vscode
 /temp

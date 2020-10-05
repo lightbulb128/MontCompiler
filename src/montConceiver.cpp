@@ -92,7 +92,7 @@ string MontIntermediate::toAssembly(){
         case IR_NEQ: return LW2 + 
                 _L("sub t1, t1, t2") + 
                 _L("snez t1, t1") + BSP + SW1;
-        case IR_NOT: return LW2 + _L("not t1,t1") + SW1;
+        case IR_NOT: return LW1 + _L("not t1,t1") + SW1;
         case IR_POP: return BSP;
         case IR_PUSH: return 
                 _L("addi sp, sp, -4") + 
