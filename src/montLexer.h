@@ -24,6 +24,7 @@ enum TokenKind {
     // keywords
     TK_RETURN, TK_INT, TK_CHAR, TK_IF, TK_ELSE, 
     TK_FOR, TK_WHILE, TK_DO, TK_CONTINUE, TK_BREAK,
+    TK_VOID, 
     // symbols
     TK_LPAREN, TK_RPAREN, TK_LBRACE, TK_RBRACE, TK_SEMICOLON, 
     TK_COMMA, 

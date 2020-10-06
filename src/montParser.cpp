@@ -134,9 +134,9 @@ bool MontNode::tryParseUnary(MontLexer& lexer) {
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_UNARY;
     Token token = lexer.peek();
     if (!isUnaryOperatorToken(token)) {
-        ptr->expansion = NE_UNARY_PRIMARY;
-        if (!ptr->tryParsePrimary(lexer)) 
-            PARSEFAIL("Unary: Expect primary syntax.");
+        ptr->expansion = NE_UNARY_POSTFIX;
+        if (!ptr->tryParsePostfix(lexer)) 
+            PARSEFAIL("Unary: Expect postfix syntax.");
     } else {
         ptr->expansion = NE_UNARY_OPERATION;
         if (!ptr->tryParse(lexer, token.tokenKind) || !ptr->tryParseUnary(lexer)) 
@@ -324,8 +324,10 @@ bool MontNode::tryParseAssignment(MontLexer& lexer) {
             ptr->putback(lexer);
         else successful = true, ptr->expansion = NE_ASSIGNMENT_ASSIGN;
     }
-    if (!successful)  // conditional
+    if (!successful) { // conditional
         successful = ptr->tryParseConditional(lexer), ptr->expansion = NE_ASSIGNMENT_VALUE;
+        if (!successful) ptr->putback(lexer);
+    }
     tryEnd();
     if (!successful) 
         PARSEFAIL("Assignment: Invalid assignment. Expect conditional or assignment expression.");
@@ -346,6 +348,25 @@ bool MontNode::tryParseConditional(MontLexer& lexer) {
             PARSEFAIL("Conditional: Illegal conditional expression.");
     }
     if (DEBUG) cout << "ok parsed conditional" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParsePostfix(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse postfix " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_POSTFIX; 
+    Token p1 = lexer.nextToken(), p2 = lexer.nextToken();
+    lexer.putback(p2); lexer.putback(p1);
+    if (p1.tokenKind == TK_IDENTIFIER && p2.tokenKind == TK_LPAREN) {
+        ptr->expansion = NE_POSTFIX_CALL;
+        if (!ptr->tryParse(lexer, TK_IDENTIFIER) || !ptr->tryParse(lexer, TK_LPAREN) 
+            || !ptr->tryParseExprlist(lexer) || !ptr->tryParse(lexer, TK_RPAREN)) 
+            PARSEFAIL("Postfix: Illegal function call syntax.");
+    } else {
+        ptr->expansion = NE_POSTFIX_PRIMARY;
+        if (!ptr->tryParsePrimary(lexer))
+            PARSEFAIL("Postfix: Illegal primary syntax.");
+    } 
+    if (DEBUG) cout << "ok parsed postfix" << endl;
     addChildren(ptr); return true;
 }
 
@@ -527,19 +548,71 @@ bool MontNode::tryParseCodeblock(MontLexer& lexer){
         if (!ptr->tryParseBlockitem(lexer)) 
             PARSEFAIL("Codeblock: Illegal blockitem.");
     }
-    if (DEBUG) cout << "ok parsed codeblock" << endl;
     ptr->tryParse(lexer, TK_RBRACE); 
+    if (DEBUG) cout << "ok parsed codeblock" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseExprlist(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse exprlist " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_EXPRLIST;
+    Token peek = lexer.peek();
+    if (peek.tokenKind != TK_RPAREN) {
+        if (!ptr->tryParseExpression(lexer)) 
+            PARSEFAIL("Exprlist: Expect expression.");
+        peek = lexer.peek();
+        while (peek.tokenKind == TK_COMMA) {
+            ptr->tryParse(lexer, TK_COMMA);
+            if (!ptr->tryParseExpression(lexer)) 
+                PARSEFAIL("Exprlist: Expect expression.");
+            peek = lexer.peek();
+        }
+    }
+    if (DEBUG) cout << "ok parsed exprlist" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseParameters(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse parameters " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_PARAMETERS;
+    Token peek = lexer.peek();
+    if (peek.tokenKind != TK_RPAREN) {
+        if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER)) 
+            PARSEFAIL("Parameters: Expect parameter declaration.");
+        peek = lexer.peek();
+        while (peek.tokenKind == TK_COMMA) {
+            ptr->tryParse(lexer, TK_COMMA);
+            if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER)) 
+                PARSEFAIL("Parameters: Expect parameter declartion.");
+            peek = lexer.peek();
+        }
+    }
+    if (DEBUG) cout << "ok parsed parameters" << endl;
     addChildren(ptr); return true;
 }
 
 bool MontNode::tryParseFunction(MontLexer& lexer) {
     if (DEBUG) cout << "try parse function " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_FUNCTION;
-    if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER) ||
-        !ptr->tryParse(lexer, TK_LPAREN) || !ptr->tryParse(lexer, TK_RPAREN) ||
-        !ptr->tryParseCodeblock(lexer)) 
+    Token peek = lexer.peek();
+    if (peek.tokenKind == TK_VOID) {
+        ptr->tryParse(lexer, TK_VOID);
+    } else {
+        if (!ptr->tryParseType(lexer))
+            PARSEFAIL("Function: Expect type.");
+    }
+    if (!ptr->tryParse(lexer, TK_IDENTIFIER) || !ptr->tryParse(lexer, TK_LPAREN) 
+        || !ptr->tryParseParameters(lexer) || !ptr->tryParse(lexer, TK_RPAREN))
         PARSEFAIL("Function: Illegal function definition.");
-    MontTokenNode* identifierNode = (MontTokenNode*)(ptr->children[1]);
+    peek = lexer.peek();
+    if (peek.tokenKind == TK_SEMICOLON) {
+        ptr->expansion = NE_FUNCTION_DECLARATION;
+        ptr->tryParse(lexer, TK_SEMICOLON);
+    } else {
+        ptr->expansion = NE_FUNCTION_DEFINITION;
+        if (!ptr->tryParseCodeblock(lexer))
+            PARSEFAIL("Function: Illegal function body.");
+    }
     if (DEBUG) cout << "ok parsed function" << endl;
     addChildren(ptr); return true;
 }
@@ -547,8 +620,14 @@ bool MontNode::tryParseFunction(MontLexer& lexer) {
 bool MontNode::tryParseProgram(MontLexer& lexer) {
     if (DEBUG) cout << "try parse program " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_PROGRAM;
-    if (!ptr->tryParseFunction(lexer) || !ptr->tryParse(lexer, TK_EOF))
-        PARSEFAIL("Program: Illegal program.");
+    Token peek = lexer.peek();
+    while (peek.tokenKind != TK_EOF) {
+        if (!ptr->tryParseFunction(lexer)) 
+            PARSEFAIL("Program: Expect function declaration.");
+        peek = lexer.peek();
+    }
+    if (!ptr->tryParse(lexer, TK_EOF))
+        PARSEFAIL("Program: Expect EOF.");
     if (DEBUG) cout << "ok parsed program" << endl;
     addChildren(ptr); return true;
 }
@@ -605,6 +684,9 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NK_UNDEFINED:  out << "undefined"; break;
         case NK_FOR:        out << "for"; break;
         case NK_WHILE:      out << "while"; break;
+        case NK_PARAMETERS: out << "parameters"; break;
+        case NK_EXPRLIST:   out << "exprlist"; break;
+        case NK_POSTFIX:    out << "postfix"; break;
         case NK_EMPTY:      out << "empty"; break;
         default: out << "???"; break;
     }
@@ -624,6 +706,8 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_EQUALITY_LEAF: out << "leaf"; break;
         case NE_FOR_EXPRESSION: out << "expression"; break;
         case NE_FOR_DECLARATION: out << "declaration"; break;
+        case NE_FUNCTION_DEFINITION: out << "definition"; break;
+        case NE_FUNCTION_DECLARATION: out << "declaration"; break;
         case NE_IF_ELSE: out << "else"; break;
         case NE_IF_SIMPLE: out << "simple"; break;
         case NE_LAND_INNER: out << "inner"; break;
@@ -632,6 +716,8 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_LOR_LEAF: out << "leaf"; break;
         case NE_MULTIPLICATIVE_INNER: out << "inner"; break;
         case NE_MULTIPLICATIVE_LEAF: out << "leaf"; break;
+        case NE_POSTFIX_CALL: out << "call"; break;
+        case NE_POSTFIX_PRIMARY: out << "primary"; break;
         case NE_PRIMARY_IDENTIFIER: out << "identifier"; break;
         case NE_PRIMARY_PAREN: out << "paren"; break;
         case NE_PRIMARY_VALUE: out << "value"; break;
@@ -647,7 +733,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_STATEMENT_FOR: out << "for"; break;
         case NE_STATEMENT_WHILE: out << "while"; break;
         case NE_UNARY_OPERATION: out << "operation"; break;
-        case NE_UNARY_PRIMARY: out << "primary"; break;
+        case NE_UNARY_POSTFIX: out << "postfix"; break;
         case NE_WHILE_DO: out << "do"; break;
         case NE_WHILE_STANDARD: out << "standard"; break;
     }

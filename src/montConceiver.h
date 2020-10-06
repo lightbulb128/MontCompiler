@@ -46,25 +46,31 @@ enum IntermediateType {
     IR_BR // str
 };
 
-enum IdentifierType {
-    IT_VARIABLE,
-    IT_FUNCTION,
-    IT_UNDEFINED
+struct MontVariable {
+    string name;
+    int location;
+    MontVariable(string n, int loc) : name(n), location(loc) {}
 };
 
-struct MontIdentifier {
+struct MontFunction {
+    vector<MontDatatype> para;
     string name;
-    IdentifierType type;
-    int location;
-    MontIdentifier(string n, IdentifierType t, int loc) : name(n), type(t), location(loc) {}
+    MontDatatype ret;
+    bool declared;
+    bool defined; 
+    MontFunction(string name, MontDatatype ret) : name(name), ret(ret) {
+        para = vector<MontDatatype>();
+        declared = true; defined = false;
+    }
+    void addPara(MontDatatype p) {para.push_back(p);}
 };
 
 // blocking为真的栈帧为实际上的栈帧顶部。
 struct MontStackFrame {
-    vector<MontIdentifier> identifiers;
+    vector<MontVariable> identifiers;
     bool blocking;
-    MontStackFrame(bool blocking=false): blocking(blocking) {identifiers = vector<MontIdentifier>();}
-    void push(string name, IdentifierType type, int loc){identifiers.push_back(MontIdentifier(name, type, loc));}
+    MontStackFrame(bool blocking=false): blocking(blocking) {identifiers = vector<MontVariable>();}
+    void push(string name, int loc){identifiers.push_back(MontVariable(name, loc));}
 };
 
 struct MontIntermediate {
@@ -101,10 +107,10 @@ private:
     int variablePointer; // 指示当前要加入的变量是第几个局部变量，从0开始。
     int labelCounter; // 指示加入的label的名称。
     stack<int> loops;
-    void pushIdentifier(string name, IdentifierType type = IT_VARIABLE);
+    void pushVariable(string name);
     void pushFrame(bool blocking);
     void popFrame();
-    int getIdentifier(string name); // 未查询到结果时返回-1，查询到结果应当为声明该变量时对应的variablePointer
+    int getVariable(string name); // 未查询到结果时返回-1，查询到结果应当为声明该变量时对应的variablePointer
     int checkRedeclaration(string name); // 仅查询本块内，即本frame中的
     void pushLoop(int id){loops.push(id);}
     int getCurrentLoop(){return (loops.size()>0) ? loops.top() : -1;}

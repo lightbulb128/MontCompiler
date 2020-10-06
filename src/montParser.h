@@ -39,6 +39,9 @@ enum MontNodeKind {
     NK_CONDITIONAL, 
     NK_FOR,
     NK_WHILE,
+    NK_PARAMETERS,
+    NK_EXPRLIST,
+    NK_POSTFIX,
     NK_UNDEFINED,
     NK_EMPTY, // 占位符，例如 for 的 expr 可能为空。
 };
@@ -54,7 +57,7 @@ enum MontNodeExpansion {
     NE_STATEMENT_WHILE,
     NE_STATEMENT_BREAK,
     NE_STATEMENT_CONTINUE,
-    NE_UNARY_PRIMARY,
+    NE_UNARY_POSTFIX,
     NE_UNARY_OPERATION,
     NE_PRIMARY_VALUE,
     NE_PRIMARY_PAREN,
@@ -84,7 +87,16 @@ enum MontNodeExpansion {
     NE_FOR_EXPRESSION,
     NE_FOR_DECLARATION,
     NE_WHILE_STANDARD,
-    NE_WHILE_DO
+    NE_WHILE_DO,
+    NE_FUNCTION_DECLARATION,
+    NE_FUNCTION_DEFINITION,
+    NE_POSTFIX_PRIMARY,
+    NE_POSTFIX_CALL
+};
+
+enum MontDatatype {
+    DT_INT,
+    DT_VOID
 };
 
 class MontNode {
@@ -93,6 +105,7 @@ protected:
     MontNodeKind kind;
     MontNodeExpansion expansion;
     vector<MontNodePtr> children;
+    MontDatatype datatype; // 在conceiver中得到它的值。
     // static string errorInfo;
     int row, column;
     int memorySize; 
@@ -102,11 +115,11 @@ public:
     MontNode(MontLexer& lexer){
         children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
         lexer.peek(); row = lexer.getCurrentRow(); column = lexer.getCurrentColumn();
-        memorySize = 0;
+        memorySize = 0; datatype = DT_VOID;
     }
     MontNode(){
         children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
-        row = column = 0; memorySize = 0;
+        row = column = 0; memorySize = 0; datatype = DT_VOID;
         //lexer.peek(); row = lexer.getCurrentRow(); column = lexer.getCurrentColumn();
     }
     static void tryStart();
@@ -150,6 +163,9 @@ public:
     bool tryParseConditional(MontLexer& lexer);
     bool tryParseFor(MontLexer& lexer);
     bool tryParseWhile(MontLexer& lexer);
+    bool tryParseParameters(MontLexer& lexer);
+    bool tryParseExprlist(MontLexer& lexer);
+    bool tryParsePostfix(MontLexer& postfix);
     void output(string tab, bool lastchild, std::ostream& stream);
 };
 

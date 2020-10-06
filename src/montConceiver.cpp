@@ -163,7 +163,7 @@ bool MontConceiver::visit(MontNodePtr node) {
                 return visitChild(node, 0);
             else if (node->expansion == NE_ASSIGNMENT_ASSIGN) { // Identifier Assign expression
                 Token name = getTokenChild(node, 0);
-                int id = getIdentifier(name.identifier);
+                int id = getVariable(name.identifier);
                 if (id==-1) 
                     return appendErrorInfo("Assignment: Undefined identifier: " + name.identifier + ".", NRC);
                 flag = visitChild(node, 2);
@@ -207,14 +207,14 @@ bool MontConceiver::visit(MontNodePtr node) {
             int id = checkRedeclaration(name.identifier);
             if (id!=-1) 
                 return appendErrorInfo("Declaration: Variable redeclared: " + name.identifier + ".", NRC);
-            pushIdentifier(name.identifier, IT_VARIABLE);
+            pushVariable(name.identifier);
             if (node->expansion == NE_DECLARATION_INIT) {
                 flag = visitChild(node, 3);
                 if (!flag) return false;
             } else if (node->expansion == NE_DECLARATION_SIMPLE) 
                 add(IRINT(IR_PUSH, 0));
             else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
-            id = getIdentifier(name.identifier);
+            id = getVariable(name.identifier);
             add(IRINT(IR_FRAMEADDR, id));
             add(IRSIM(IR_STORE));
             add(IRSIM(IR_POP));
@@ -366,7 +366,7 @@ bool MontConceiver::visit(MontNodePtr node) {
                 return visitChild(node, 1); 
             else if (node->expansion == NE_PRIMARY_IDENTIFIER) {
                 Token name = getTokenChild(node, 0);
-                int id = getIdentifier(name.identifier);
+                int id = getVariable(name.identifier);
                 if (id==-1) return appendErrorInfo("Primary: Undefined identifier: " + name.identifier + ".", NRC);
                 add(IRINT(IR_FRAMEADDR, id));
                 add(IRSIM(IR_LOAD));
@@ -482,9 +482,12 @@ bool MontConceiver::visit(MontNodePtr node) {
                         return appendErrorInfo("Unary: No operator.", node->row, node->column); 
                     break;
                 } 
-                case NE_UNARY_PRIMARY: { // unary : value
+                case NE_UNARY_POSTFIX: { // unary : value
                     return visitChild(node, 0);
                     break;
+                }
+                default: {
+                    return appendErrorInfo("Unary: Undefined unary syntax.", NRC);
                 }
             }           
             break;
@@ -531,9 +534,9 @@ ostream& operator <<(ostream& out, MontConceiver& con){
     return out;
 }
 
-void MontConceiver::pushIdentifier(string name, IdentifierType type){
+void MontConceiver::pushVariable(string name){
     int size = frames.size();
-    frames[size-1].push(name, type, variablePointer);
+    frames[size-1].push(name, variablePointer);
     variablePointer++;
 }
 
@@ -549,7 +552,7 @@ void MontConceiver::popFrame(){
     frames.pop_back();
 }
 
-int MontConceiver::getIdentifier(string name){
+int MontConceiver::getVariable(string name){
     int fs = frames.size();
     for (int i=fs-1;i>=0;i--) {
         MontStackFrame& f = frames[i];

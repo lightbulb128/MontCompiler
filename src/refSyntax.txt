@@ -1,5 +1,7 @@
-program     :   function EOF
-function    :   type Identifier LParen RParen codeblock
+program     :   function* EOF
+function    :   type|Void Identifier LP parameters RP codeblock     FUNCTION_DEFINITION
+            |   type|Void Identifier LP parameters RP Semicolon     FUNCTION_DECLARATION
+parameters  :   (type Identifier (Comma type Identifier)*)?
 codeblock   :   LBrace (blockitem)* RBrace
 blockitem   :   statement                                           BLOCKITEM_STATEMENT
             |   declaration Semicolon                               BLOCKITEM_DECLARATION
@@ -21,6 +23,7 @@ if          :   If LP expression RP statement                       IF_SIMPLE
 declaration :   type Identifier                                     DECLARATION_SIMPLE
             |   type Identifier Assign expression                   DECLARATION_INIT
 type        :   Integer | Char
+exprlist    :   (expression (, expression)*)?
 expression  :   assignment
 assignment  :   conditional                                         ASSIGNMENT_VALUE
             |   Identifier Assign expression                        ASSIGNMENT_ASSIGN
@@ -38,8 +41,10 @@ additive    :   multiplicative                                      ADDITIVE_LEA
             |   multiplicative (Plus|Minus) additive                ADDITIVE_INNER
 multiplica  :   unary                                               MULTI_LEAF
             |   multiplicative (Asterisk|Percent|LSlash) uanry      MULTI_INNER
-unary       :   primary                                             UNARY_PRIMARY
+unary       :   postfix                                             UNARY_POSTFIX
             |   (Exclamation|Tilde|Minus) unary                     UNARY_OPERATOR
+postfix     :   primary                                             POSTFIX_PRIMARY
+            |   Identifier LParen exprlist RParen                   POSTFIX_CALL
 primary     :   value                                               PRIMARY_VALUE
             |   LParen expression RParen                            PRIMARY_PAREN
             |   Identifier                                          PRIMARY_IDENTIFIER

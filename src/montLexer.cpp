@@ -68,6 +68,7 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_DO: stream << "Do"; break;
         case TK_CONTINUE: stream << "Continue"; break;
         case TK_BREAK: stream << "Break"; break;
+        case TK_VOID: stream << "Void"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -396,6 +397,7 @@ void MontLexer::addDefaultKeywords(){
     addKeyword("if", TK_IF);
     addKeyword("int", TK_INT);
     addKeyword("return", TK_RETURN);
+    addKeyword("void", TK_VOID);
     addKeyword("while", TK_WHILE);
 }
 
