@@ -220,6 +220,9 @@ bool MontConceiver::visit(MontNodePtr node) {
             add(IRSIM(IR_POP));
             return true;
         }
+        case NK_EMPTY: {
+            return true;
+        }
         case NK_EQUALITY: {
             if (node->expansion == NE_EQUALITY_LEAF) 
                 return visitChild(node,0);
@@ -247,7 +250,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             int labelId = labelCounter ++; pushLoop(labelId);
             pushFrame(false);
             if (!visitChild(node, 2)) return false;
-            if (node->expansion == NE_FOR_EXPRESSION) 
+            if (node->expansion == NE_FOR_EXPRESSION && node->children[2]->kind != NK_EMPTY) 
                 add(IRSIM(IR_POP));
             add(IRSTR(IR_LABEL, getLabel("LOOP_BEGIN")));
             if (!visitChild(node, 4)) return false;
@@ -256,6 +259,8 @@ bool MontConceiver::visit(MontNodePtr node) {
             if (!visitChild(node, 8)) return false;
             add(IRSTR(IR_LABEL, getLabel("LOOP_CONTINUE")));
             if (!visitChild(node, 6)) return false;
+            if (node->children[6]->kind != NK_EMPTY)
+                add(IRSIM(IR_POP));
             popFrame();
             add(IRSTR(IR_BR, getLabel("LOOP_BEGIN")));
             add(IRSTR(IR_LABEL, getLabel("LOOP_BREAK")));

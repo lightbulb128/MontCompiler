@@ -39,7 +39,8 @@ enum MontNodeKind {
     NK_CONDITIONAL, 
     NK_FOR,
     NK_WHILE,
-    NK_UNDEFINED
+    NK_UNDEFINED,
+    NK_EMPTY, // 占位符，例如 for 的 expr 可能为空。
 };
 
 enum MontNodeExpansion {
@@ -119,6 +120,7 @@ public:
     //void trySetRC(MontLexer& lexer){lexer.peek(); if (children.size()==0) row=lexer.getCurrentRow(), column=lexer.getCurrentColumn();}
     void addChildren(MontNodePtr ptr); 
     bool tryParse(MontLexer& lexer, TokenKind tk);
+    bool tryParseEmpty(MontLexer& lexer);
     static bool isValueToken(Token& t);
     bool tryParseValue(MontLexer& lexer);
     static bool isUnaryOperatorToken(Token& t);

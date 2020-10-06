@@ -12,8 +12,8 @@ statement   :   expression Semicolon                                STATEMENT_EX
             |   while                                               STATEMENT_WHILE
             |   Break Semicolon                                     STATEMENT_BREAK
             |   Continue Semicolon                                  STATEMENT_CONTINUE
-for         :   For LP expression SC expr SC expr RP statement      FOR_EXPRESSION
-            |   For LP declaration SC expr SC expr RP statement     FOR_DECLARATION
+for         :   For LP expression? SC expr? SC expr? RP statement   FOR_EXPRESSION
+            |   For LP declaration SC expr? SC expr? RP statement   FOR_DECLARATION
 while       :   While LP expression RP statement                    WHILE_STANDARD
             |   Do statement While LP expression RP SC              WHILE_DO
 if          :   If LP expression RP statement                       IF_SIMPLE

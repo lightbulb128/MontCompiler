@@ -76,6 +76,13 @@ bool MontNode::tryParseValue(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
+bool MontNode::tryParseEmpty(MontLexer& lexer){
+    if (DEBUG) cout << "try parse empty " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_EMPTY;
+    if (DEBUG) cout << "ok parsed empty" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::isUnaryOperatorToken(Token& t){
     return (t.tokenKind == TK_EXCLAMATION ||
         t.tokenKind == TK_TILDE ||
@@ -379,13 +386,30 @@ bool MontNode::tryParseFor(MontLexer& lexer) {
     } else {
         ptr->expansion = NE_FOR_EXPRESSION;
         // For LParen expression Semicolon expression Semicolon expression RParen statement
-        if (!ptr->tryParseExpression(lexer)) 
-            PARSEFAIL("For: Invalid for syntax with expression init.");
+        peek = lexer.peek();
+        if (peek.tokenKind != TK_SEMICOLON) {
+            if (!ptr->tryParseExpression(lexer)) 
+                PARSEFAIL("For: Invalid for syntax with expression init.");
+        } else 
+            ptr->tryParseEmpty(lexer);
     }
-    if (!ptr->tryParse(lexer, TK_SEMICOLON) || !ptr->tryParseExpression(lexer) 
+    /*if (!ptr->tryParse(lexer, TK_SEMICOLON) || !ptr->tryParseExpression(lexer) 
         || !ptr->tryParse(lexer, TK_SEMICOLON) || !ptr->tryParseExpression(lexer) 
         || !ptr->tryParse(lexer, TK_RPAREN) || !ptr->tryParseStatement(lexer)) 
         PARSEFAIL("For: Invalid for body.");
+    */
+    if (!ptr->tryParse(lexer, TK_SEMICOLON)) PARSEFAIL("For: Expect first semicolon.");
+    peek = lexer.peek();
+    if (peek.tokenKind != TK_SEMICOLON) {
+        if (!ptr->tryParseExpression(lexer)) PARSEFAIL("For: Invalid condition expression.");
+    } else ptr->tryParseEmpty(lexer);
+    if (!ptr->tryParse(lexer, TK_SEMICOLON)) PARSEFAIL("For: Expect second semicolon.");
+    peek = lexer.peek();
+    if (peek.tokenKind != TK_RPAREN) {
+        if (!ptr->tryParseExpression(lexer)) PARSEFAIL("For: Invalid post-loop expression.");
+    } else ptr->tryParseEmpty(lexer);
+    if (!ptr->tryParse(lexer, TK_RPAREN)) PARSEFAIL("For: Expect RParen.");
+    if (!ptr->tryParseStatement(lexer)) PARSEFAIL("For: Invalid body statement.");
     if (DEBUG) cout << "ok parsed for" << endl;
     addChildren(ptr); return true;
 }
@@ -581,6 +605,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NK_UNDEFINED:  out << "undefined"; break;
         case NK_FOR:        out << "for"; break;
         case NK_WHILE:      out << "while"; break;
+        case NK_EMPTY:      out << "empty"; break;
         default: out << "???"; break;
     }
     if (expansion != NE_NONE) out << " - ";
