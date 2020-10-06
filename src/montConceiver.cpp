@@ -16,6 +16,8 @@
 MontLog MontConceiver::logger = MontLog();
 
 using std::ostream;
+using std::cerr;
+using std::endl;
 
 string MontIntermediate::toString(){
     switch (code) {
@@ -269,7 +271,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             return true;
             break;
         }
-        case NK_FUNCTION: {
+        case NK_FUNCTION: { // type|Void Identifier LP parameters RP codeblock
             Token identifier = getTokenChild(node, 1);
             if (identifier.identifier!="main") 
                 flag = appendErrorInfo("Function: Function name not 'main'.", node);
@@ -278,7 +280,7 @@ bool MontConceiver::visit(MontNodePtr node) {
                 add(IRSTR(IR_LABEL, identifier.identifier));
                 add(IRINT(IR_BUILDFRAME, node->memorySize)); 
                 pushFrame(true);
-                flag = visitChild(node, 4);
+                flag = visitChild(node, 5);
                 popFrame();
                 // 如若最后一条指令不是ret，则添加一个ret，默认返回值为0.
                 if (irs[irs.size()-1].code != IR_RET) {
@@ -358,6 +360,10 @@ bool MontConceiver::visit(MontNodePtr node) {
             else 
                 return appendErrorInfo("Multiplicative: Undefined multiplicative syntax.", node->row, node->column);
             break;
+        }
+        case NK_POSTFIX: {
+            if (node->expansion == NE_POSTFIX_PRIMARY) 
+                return visitChild(node, 0);
         }
         case NK_PRIMARY: {
             if (node->expansion == NE_PRIMARY_VALUE) 
@@ -495,6 +501,7 @@ bool MontConceiver::visit(MontNodePtr node) {
         case NK_VALUE:{
             Token valueToken = getTokenChild(node, 0);
             int value = valueToken.value;
+            //std::cerr << value << endl;
             add(IRINT(IR_PUSH, value));
             return true;
             break;
