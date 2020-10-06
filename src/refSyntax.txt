@@ -1,32 +1,38 @@
 program     :   function EOF
 function    :   type Identifier LParen RParen codeblock
-codeblock   :   LBrace (statement)* RBrace
-statement   :   declaration Semicolon                 STATEMENT_DECLARATION
-            |   expression Semicolon                  STATEMENT_EXPRESSION
-            |   Return expression Semicolon           STATEMENT_RETURN
-            |   Semicolon                             STATEMENT_EMPTY
-            |   codeblock                             STATEMENT_CODEBLOCK
-declaration :   type Identifier                       DECLARATION_SIMPLE
-            |   type Identifier Assign expression     DECLARATION_INIT
+codeblock   :   LBrace (blockitem)* RBrace
+blockitem   :   statement                                           BLOCKITEM_STATEMENT
+            |   declaration Semicolon                               BLOCKITEM_DECLARATION
+statement   :   expression Semicolon                                STATEMENT_EXPRESSION
+            |   Return expression Semicolon                         STATEMENT_RETURN
+            |   Semicolon                                           STATEMENT_EMPTY
+            |   codeblock                                           STATEMENT_CODEBLOCK
+            |   if                                                  STATEMENT_IF
+if          :   If LP expression RP statement                       IF_SIMPLE
+            :   If LP expression RP statement Else statement        IF_ELSE
+declaration :   type Identifier                                     DECLARATION_SIMPLE
+            |   type Identifier Assign expression                   DECLARATION_INIT
 type        :   Integer | Char
 expression  :   assignment
-assignment  :   logical_or                            ASSIGNMENT_VALUE
-            |   Identifier Assign expression          ASSIGNMENT_ASSIGN
-logical_or  :   logical_and                           LOR_LEAF
-            |   logical_or Or logical_and             LOR_INNER
-logical_and :   equality                              LAND_LEAF   
-            |   logical_and And equality              LAND_INNER
-equality    :   relational                            EQUALITY_LEAF
-            |   equality (Equal|NotEqual) relational  EQUALITY_INNER
-relational  :   additive                              RELATIONAL_LEAF
-            |   relational (G|L|GE|LE) additive       RELATIONAL_INNER
-additive    :   multiplicative                        ADDITIVE_LEAF
-            |   multiplicative (Plus|Minus) additive  ADDITIVE_INNER
-multiplica  :   unary                                           MULTI_LEAF
-            |   multiplicative (Asterisk|Percent|LSlash) uanry  MULTI_INNER
-unary       :   primary                               UNARY_PRIMARY
-            |   (Exclamation|Tilde|Minus) unary       UNARY_OPERATOR
-primary     :   value                                 PRIMARY_VALUE
-            |   LParen expression RParen              PRIMARY_PAREN
-            |   Identifier                            PRIMARY_IDENTIFIER
+assignment  :   conditional                                         ASSIGNMENT_VALUE
+            |   Identifier Assign expression                        ASSIGNMENT_ASSIGN
+conditional :   logical_or                                          CONDITIONAL_LEAF
+            |   logical_or Question expression Colon conditional    CONDITIONAL_INNER
+logical_or  :   logical_and                                         LOR_LEAF
+            |   logical_or Or logical_and                           LOR_INNER
+logical_and :   equality                                            LAND_LEAF   
+            |   logical_and And equality                            LAND_INNER
+equality    :   relational                                          EQUALITY_LEAF
+            |   equality (Equal|NotEqual) relational                EQUALITY_INNER
+relational  :   additive                                            RELATIONAL_LEAF
+            |   relational (G|L|GE|LE) additive                     RELATIONAL_INNER
+additive    :   multiplicative                                      ADDITIVE_LEAF
+            |   multiplicative (Plus|Minus) additive                ADDITIVE_INNER
+multiplica  :   unary                                               MULTI_LEAF
+            |   multiplicative (Asterisk|Percent|LSlash) uanry      MULTI_INNER
+unary       :   primary                                             UNARY_PRIMARY
+            |   (Exclamation|Tilde|Minus) unary                     UNARY_OPERATOR
+primary     :   value                                               PRIMARY_VALUE
+            |   LParen expression RParen                            PRIMARY_PAREN
+            |   Identifier                                          PRIMARY_IDENTIFIER
 value       :   CharValue | IntValue

@@ -167,6 +167,14 @@ bool MontConceiver::visit(MontNodePtr node) {
             } else 
                 return appendErrorInfo("Assignment: Undefined assignment syntax.", NRC);
         }
+        case NK_BLOCKITEM: {
+            if (node->expansion == NE_BLOCKITEM_DECLARATION) 
+                return visitChild(node, 0);
+            else if (node->expansion == NE_BLOCKITEM_STATEMENT) 
+                return visitChild(node, 0);
+            else 
+                return appendErrorInfo("Blockitem: Undefined blockitem syntax.", NRC);
+        }
         case NK_CODEBLOCK: { 
             return visitChildren(node);
             break;
@@ -336,10 +344,6 @@ bool MontConceiver::visit(MontNodePtr node) {
                     flag = visitChild(node, 1);
                     add(IRSIM(IR_RET));
                     return flag;
-                    break;
-                }
-                case NE_STATEMENT_DECLARATION: { 
-                    return visitChild(node, 0);
                     break;
                 }
                 case NE_STATEMENT_CODEBLOCK: {

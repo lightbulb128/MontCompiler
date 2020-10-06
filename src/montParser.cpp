@@ -325,17 +325,30 @@ bool MontNode::tryParseAssignment(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
+bool MontNode::tryParseBlockitem(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse blockitem " << lexer.peek() << endl;
+    Token peek = lexer.peek();
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_BLOCKITEM;
+    if (isTypeToken(peek)) {
+        ptr->expansion = NE_BLOCKITEM_DECLARATION;
+        if (!ptr->tryParseDeclaration(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON))
+            PARSEFAIL("Blockitem: Illegal variable declaration.");
+        if (DEBUG) cout << "ok parsed blockitem declaration" << endl;
+        addChildren(ptr); return true;
+    } else {
+        ptr->expansion = NE_BLOCKITEM_STATEMENT;
+        if (!ptr->tryParseStatement(lexer))
+            PARSEFAIL("Blockitem: Illegal statement.");
+        if (DEBUG) cout << "ok parsed blockitem statement" << endl;
+        addChildren(ptr); return true;
+    }
+}
+
 bool MontNode::tryParseStatement(MontLexer& lexer) {
     if (DEBUG) cout << "try parse statement " << lexer.peek() << endl;
     Token peek = lexer.peek();
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_STATEMENT;
-    if (isTypeToken(peek)) {
-        ptr->expansion = NE_STATEMENT_DECLARATION;
-        if (!ptr->tryParseDeclaration(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON))
-            PARSEFAIL("Statement: Illegal variable declaration.");
-        if (DEBUG) cout << "ok parsed statement vardefine" << endl;
-        addChildren(ptr); return true;
-    } else if (peek.tokenKind == TK_RETURN) {
+    if (peek.tokenKind == TK_RETURN) {
         ptr->tryParse(lexer, TK_RETURN); ptr->expansion = NE_STATEMENT_RETURN;
         if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
             PARSEFAIL("Statement: Illegal return statement.");
@@ -368,8 +381,8 @@ bool MontNode::tryParseCodeblock(MontLexer& lexer){
     while (true) {
         Token peek = lexer.peek();
         if (peek.tokenKind == TK_RBRACE) break;
-        if (!ptr->tryParseStatement(lexer)) 
-            PARSEFAIL("Codeblock: Illegal statement.");
+        if (!ptr->tryParseBlockitem(lexer)) 
+            PARSEFAIL("Codeblock: Illegal blockitem.");
     }
     if (DEBUG) cout << "ok parsed codeblock" << endl;
     ptr->tryParse(lexer, TK_RBRACE); 
@@ -443,6 +456,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NK_PRIMARY:    out << "primary"; break;
         case NK_ASSIGNMENT: out << "assignment"; break;
         case NK_DECLARATION:out << "declaration"; break;
+        case NK_BLOCKITEM:  out << "blockitem"; break;
         case NK_UNDEFINED:  out << "undefined"; break;
         default: out << "???"; break;
     }
@@ -452,6 +466,8 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_ADDITIVE_INNER: out << "inner"; break;
         case NE_ASSIGNMENT_ASSIGN: out << "assign"; break;
         case NE_ASSIGNMENT_VALUE: out << "value"; break;
+        case NE_BLOCKITEM_DECLARATION: out << "declaration"; break;
+        case NE_BLOCKITEM_STATEMENT: out << "statement"; break;
         case NE_DECLARATION_INIT: out << "init"; break;
         case NE_DECLARATION_SIMPLE: out << "simple"; break;
         case NE_EQUALITY_INNER: out << "inner"; break;
@@ -467,7 +483,6 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_PRIMARY_VALUE: out << "value"; break;
         case NE_RELATIONAL_INNER: out << "inner"; break;
         case NE_RELATIONAL_LEAF: out << "leaf"; break;
-        case NE_STATEMENT_DECLARATION: out << "declaration"; break;
         case NE_STATEMENT_EMPTY: out << "empty"; break;
         case NE_STATEMENT_EXPRESSION: out << "expression"; break;
         case NE_STATEMENT_RETURN: out << "return"; break;

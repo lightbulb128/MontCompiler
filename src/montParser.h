@@ -34,12 +34,12 @@ enum MontNodeKind {
     NK_TOKEN,
     NK_DECLARATION, 
     NK_ASSIGNMENT, 
+    NK_BLOCKITEM,
     NK_UNDEFINED
 };
 
 enum MontNodeExpansion {
     NE_NONE, 
-    NE_STATEMENT_DECLARATION,
     NE_STATEMENT_EXPRESSION,
     NE_STATEMENT_RETURN,
     NE_STATEMENT_CODEBLOCK,
@@ -64,7 +64,9 @@ enum MontNodeExpansion {
     NE_DECLARATION_SIMPLE,
     NE_DECLARATION_INIT,
     NE_ASSIGNMENT_VALUE,
-    NE_ASSIGNMENT_ASSIGN
+    NE_ASSIGNMENT_ASSIGN,
+    NE_BLOCKITEM_STATEMENT,
+    NE_BLOCKITEM_DECLARATION
 };
 
 class MontNode {
@@ -124,6 +126,7 @@ public:
     bool tryParseProgram(MontLexer& lexer);
     bool tryParseDeclaration(MontLexer& lexer);
     bool tryParseAssignment(MontLexer& lexer);
+    bool tryParseBlockitem(MontLexer& lexer);
     void output(string tab, bool lastchild, std::ostream& stream);
 };
 
