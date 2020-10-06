@@ -59,6 +59,10 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_OR: stream << "Or |"; break;
         case TK_LAND: stream << "Logical and &&"; break;
         case TK_LOR: stream << "Logical or ||"; break;
+        case TK_IF: stream << "If"; break;
+        case TK_ELSE: stream << "Else"; break;
+        case TK_QUESTION: stream << "Question ?"; break;
+        case TK_COLON: stream << "Colon :"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -206,6 +210,10 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                 if (peek=='&') {currentToken = Token(TK_LAND); return TR_PEEKUSED_FINISHED;}
                 else {currentToken = Token(TK_AND); return TR_FINISHED;}
                 break;
+            case '?':
+                currentToken = Token(TK_QUESTION); return TR_FINISHED; break;
+            case ':':
+                currentToken = Token(TK_COLON); return TR_FINISHED; break;
             default:
                 flagSymbol = false;
         }
@@ -375,6 +383,8 @@ void MontLexer::addKeyword(const char* keyword, TokenKind tk) {
 void MontLexer::addDefaultKeywords(){
     // please add keywords by alphabetical order
     addKeyword("char", TK_CHAR);
+    addKeyword("else", TK_ELSE);
+    addKeyword("if", TK_IF);
     addKeyword("int", TK_INT);
     addKeyword("return", TK_RETURN);
 }

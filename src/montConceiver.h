@@ -15,7 +15,7 @@ using std::to_string;
 class MontAssembler;
 
 enum IntermediateType {
-    IR_PUSH,
+    IR_PUSH, // int
     IR_RET,
     IR_NEG,
     IR_NOT,
@@ -33,12 +33,15 @@ enum IntermediateType {
     IR_GE,
     IR_LAND,
     IR_LOR,
-    IR_FRAMEADDR, 
+    IR_FRAMEADDR, // int
     IR_LOAD,
     IR_STORE,
-    IR_POP,
-    IR_MARK, // Function mark, for example Foo
-    IR_BUILDFRAME // buildframe 的整数参数应当是不包括储存ra和fp以外的栈帧大小，例如函数若不包括任何局部变量则参数应为0.
+    IR_POP, // int
+    IR_LABEL, // str, Function mark, for example Foo
+    IR_BUILDFRAME, // int, buildframe 的整数参数应当是不包括储存ra和fp以外的栈帧大小，例如函数若不包括任何局部变量则参数应为0.
+    IR_BEQZ, // str
+    IR_BNEZ, // str
+    IR_BR // str
 };
 
 enum IdentifierType {
@@ -94,6 +97,7 @@ private:
     vector<MontIntermediate> irs;
     vector<MontStackFrame> frames;
     int variablePointer; // 指示当前要加入的变量是第几个局部变量，从0开始。
+    int labelCounter; // 指示加入的label的名称。
     void pushIdentifier(string name, IdentifierType type = IT_VARIABLE);
     void pushFrame(bool blocking);
     void popFrame();
@@ -110,7 +114,13 @@ public:
         MontTokenNode* ptr = (MontTokenNode*) node->children[id];
         return ptr->getToken();
     }
-    bool conceive(MontParser& p) {variablePointer = 0; return visit(p.program);}
+    bool conceive(MontParser& p) {
+        variablePointer = 0;
+        labelCounter = 0;
+        irs = vector<MontIntermediate>();
+        frames = vector<MontStackFrame>(); 
+        return visit(p.program);
+    }
     friend std::ostream& operator <<(std::ostream& stream, MontConceiver& c);
 };
 

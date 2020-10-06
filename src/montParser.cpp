@@ -1,6 +1,7 @@
 #include "montParser.h"
 #include <string>
 #include <iostream>
+#include <cmath>
 
 #define PARSEFAIL(str) {ptr->putback(lexer); appendErrorInfo(str, ptr->row, ptr->column); delete ptr; return false;}
 
@@ -267,7 +268,7 @@ bool MontNode::tryParseAdditive(MontLexer& lexer) {
 bool MontNode::tryParseExpression(MontLexer& lexer) {
     if (DEBUG) cout << "try parse expression " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_EXPRESSION;
-    if (!ptr->tryParseAssignment(lexer)) PARSEFAIL("Expression: Not valid logical_or.");
+    if (!ptr->tryParseAssignment(lexer)) PARSEFAIL("Expression: Not valid assignment.");
     if (DEBUG) cout << "ok parsed expression" << endl;
     addChildren(ptr); return true;
 }
@@ -316,12 +317,51 @@ bool MontNode::tryParseAssignment(MontLexer& lexer) {
             ptr->putback(lexer);
         else successful = true, ptr->expansion = NE_ASSIGNMENT_ASSIGN;
     }
-    if (!successful)  // logical_or
-        successful = ptr->tryParseLogicalOr(lexer), ptr->expansion = NE_ASSIGNMENT_VALUE;
+    if (!successful)  // conditional
+        successful = ptr->tryParseConditional(lexer), ptr->expansion = NE_ASSIGNMENT_VALUE;
     tryEnd();
     if (!successful) 
-        PARSEFAIL("Assignment: Invalid assignment. Expect logical_or or assignment expression.");
+        PARSEFAIL("Assignment: Invalid assignment. Expect conditional or assignment expression.");
     if (DEBUG) cout << "ok parsed assignment" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseConditional(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse conditional " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_CONDITIONAL; ptr->expansion = NE_CONDITIONAL_LEAF;
+    if (!ptr->tryParseLogicalOr(lexer)) 
+        PARSEFAIL("Conditional: Illegal logical_or syntax.");
+    Token peek = lexer.peek();
+    if (peek.tokenKind == TK_QUESTION) {
+        ptr->expansion = NE_CONDITIONAL_INNER;
+        if (!ptr->tryParse(lexer, TK_QUESTION) || !ptr->tryParseExpression(lexer)
+            || !ptr->tryParse(lexer, TK_COLON) || !ptr->tryParseConditional(lexer)) 
+            PARSEFAIL("Conditional: Illegal conditional expression.");
+    }
+    if (DEBUG) cout << "ok parsed conditional" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseIf(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse if " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_IF;
+    ptr->expansion = NE_IF_SIMPLE;
+    if (!ptr->tryParse(lexer, TK_IF) || !ptr->tryParse(lexer, TK_LPAREN) 
+        || !ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_RPAREN) 
+        || !ptr->tryParseStatement(lexer))
+        PARSEFAIL("If: Failed to parse simple if.");
+    Token peek = lexer.peek();
+    if (peek.tokenKind == TK_ELSE) {
+        ptr->expansion = NE_IF_ELSE;
+        if (!ptr->tryParse(lexer, TK_ELSE) || !ptr->tryParseStatement(lexer))
+            PARSEFAIL("If: Failed to parse else statement.");
+        ptr->memorySize = std::max(ptr->children[4]->memorySize, ptr->children[6]->memorySize);
+    } 
+    if (DEBUG) {
+        cout << "ok parsed if";
+        if (ptr->expansion == NE_IF_ELSE) cout << " else";
+        cout << endl;
+    }
     addChildren(ptr); return true;
 }
 
@@ -364,10 +404,16 @@ bool MontNode::tryParseStatement(MontLexer& lexer) {
             PARSEFAIL("Statement: Expect codeblock with LBrace.");
         if (DEBUG) cout << "ok parsed statement codeblock" << endl;
         addChildren(ptr); return true;
-    } else  {
+    } else if (peek.tokenKind == TK_IF) {
+        ptr->expansion = NE_STATEMENT_IF;
+        if (!ptr->tryParseIf(lexer)) 
+            PARSEFAIL("Statement: Illegal if statement.");
+        if (DEBUG) cout << "ok parsed statement if" << endl;
+        addChildren(ptr); return true;
+    } else {
         ptr->expansion = NE_STATEMENT_EXPRESSION;
         if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
-            PARSEFAIL("Statement: Illegal expresion statement.");
+            PARSEFAIL("Statement: Illegal expression statement.");
         if (DEBUG) cout << "ok parsed expression statement" << endl;
         addChildren(ptr); return true;
     }
@@ -457,6 +503,8 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NK_ASSIGNMENT: out << "assignment"; break;
         case NK_DECLARATION:out << "declaration"; break;
         case NK_BLOCKITEM:  out << "blockitem"; break;
+        case NK_CONDITIONAL:out << "conditional"; break;
+        case NK_IF:         out << "if"; break;
         case NK_UNDEFINED:  out << "undefined"; break;
         default: out << "???"; break;
     }
@@ -468,10 +516,14 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_ASSIGNMENT_VALUE: out << "value"; break;
         case NE_BLOCKITEM_DECLARATION: out << "declaration"; break;
         case NE_BLOCKITEM_STATEMENT: out << "statement"; break;
+        case NE_CONDITIONAL_INNER: out << "inner"; break;
+        case NE_CONDITIONAL_LEAF: out << "leaf"; break;
         case NE_DECLARATION_INIT: out << "init"; break;
         case NE_DECLARATION_SIMPLE: out << "simple"; break;
         case NE_EQUALITY_INNER: out << "inner"; break;
         case NE_EQUALITY_LEAF: out << "leaf"; break;
+        case NE_IF_ELSE: out << "else"; break;
+        case NE_IF_SIMPLE: out << "simple"; break;
         case NE_LAND_INNER: out << "inner"; break;
         case NE_LAND_LEAF: out << "leaf"; break;
         case NE_LOR_INNER: out << "inner"; break;
@@ -487,6 +539,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_STATEMENT_EXPRESSION: out << "expression"; break;
         case NE_STATEMENT_RETURN: out << "return"; break;
         case NE_STATEMENT_CODEBLOCK: out << "codeblock"; break;
+        case NE_STATEMENT_IF: out << "if"; break;
         case NE_UNARY_OPERATION: out << "operation"; break;
         case NE_UNARY_PRIMARY: out << "primary"; break;
     }

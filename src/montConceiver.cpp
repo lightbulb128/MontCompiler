@@ -7,10 +7,11 @@
 #define IRINT(c, v) (MontIntermediate::intcode(c, (v)))
 #define IRSTR(c, s) (MontIntermediate::strcode(c, (s)))
 #define NRC node->row, node->column
-#define LW2 "lw t1, 4(sp)\nlw t2, 0(sp)\n"
-#define LW1 "lw t1, 0(sp)\n"
-#define SW1 "sw t1, 0(sp)\n"
-#define BSP "addi sp, sp, 4\n"
+#define LW2 string("lw t1, 4(sp)\nlw t2, 0(sp)\n")
+#define LW1 string("lw t1, 0(sp)\n")
+#define SW1 string("sw t1, 0(sp)\n")
+#define BSP string("addi sp, sp, 4\n")
+#define getLabel(desc) ".L"+to_string(labelId)+"_"+(desc)
 
 MontLog MontConceiver::logger = MontLog();
 
@@ -19,15 +20,23 @@ using std::ostream;
 string MontIntermediate::toString(){
     switch (code) {
         case IR_ADD: return "ADD";
+        case IR_BEQZ: return "BEQZ " + str;
+        case IR_BNEZ: return "BNEZ " + str;
+        case IR_BR: return "BR " + str;
+        case IR_BUILDFRAME: return "BUILDFRAME " + to_string(num);
         case IR_DIV: return "DIV";
         case IR_EQ: return "EQ";
+        case IR_FRAMEADDR: return "FRAMEADDR " + to_string(num);
         case IR_GE: return "GE";
         case IR_GT: return "GT";
+        case IR_LABEL: return str + ":";
         case IR_LAND: return "LAND";
         case IR_LE: return "LE";
+        case IR_LOAD: return "LOAD";
         case IR_LNOT: return "LNOT";
         case IR_LOR: return "LOR";
         case IR_LT: return "LT";
+        case IR_POP: return "POP";
         case IR_MUL: return "MUL";
         case IR_NEG: return "NEG";
         case IR_NEQ: return "NEQ";
@@ -35,13 +44,8 @@ string MontIntermediate::toString(){
         case IR_PUSH: return string("PUSH ") + to_string(num);
         case IR_REM: return "REM";
         case IR_RET: return "RET";
-        case IR_SUB: return "SUB";
-        case IR_MARK: return str + ":";
-        case IR_FRAMEADDR: return "FRAMEADDR " + to_string(num);
-        case IR_POP: return "POP";
-        case IR_LOAD: return "LOAD";
         case IR_STORE: return "STORE";
-        case IR_BUILDFRAME: return "BUILDFRAME " + to_string(num);
+        case IR_SUB: return "SUB";
         default: return "IRERROR";
     }
 }
@@ -51,6 +55,9 @@ inline string _L(string s){return s+"\n";}
 string MontIntermediate::toAssembly(){
     switch (code) {
         case IR_ADD: return LW2 + _L("add t1, t1, t2") + BSP + SW1;
+        case IR_BEQZ: return LW1 + BSP + _L("beqz t1, " + str);
+        case IR_BNEZ: return LW1 + BSP + _L("bnez t1, " + str);
+        case IR_BR: return _L("j " + str);
         case IR_BUILDFRAME: return 
                 _L("sw ra, -4(sp)") + 
                 _L("sw fp, -8(sp)") + 
@@ -68,6 +75,7 @@ string MontIntermediate::toAssembly(){
                 _L("slt t1, t1, t2") +
                 _L("xori t1, t1, 1") + BSP + SW1;
         case IR_GT: return LW2 + _L("sgt t1, t1, t2") + BSP + SW1;
+        case IR_LABEL: return str + ":";
         case IR_LAND: return LW2 +
                 _L("snez t1, t1") + 
                 _L("snez t2, t2") + 
@@ -86,7 +94,6 @@ string MontIntermediate::toAssembly(){
                 _L("or t1, t1, t2") + 
                 _L("snez t1, t1")+BSP+SW1;
         case IR_LT: return LW2 + _L("slt t1, t1, t2")+BSP+SW1;
-        case IR_MARK: return str + ":";
         case IR_MUL: return LW2 + _L("mul t1, t1, t2")+BSP+SW1;
         case IR_NEG: return LW1 + _L("neg t1,t1") + SW1;
         case IR_NEQ: return LW2 + 
@@ -112,7 +119,7 @@ string MontIntermediate::toAssembly(){
 }
 
 ostream& operator <<(ostream& out, MontIntermediate ir){
-    if (ir.code != IR_MARK) out << "    " << ir.toString(); 
+    if (ir.code != IR_LABEL) out << "    " << ir.toString(); 
     else out << ir.toString();
     return out;
 }
@@ -179,6 +186,22 @@ bool MontConceiver::visit(MontNodePtr node) {
             return visitChildren(node);
             break;
         }
+        case NK_CONDITIONAL: {
+            if (node->expansion == NE_CONDITIONAL_LEAF) { // logical_or 
+                return visitChild(node, 0);
+            } else if (node->expansion == NE_CONDITIONAL_INNER) { // logical_or Question expression Colon conditional
+                int labelId = labelCounter ++;
+                if (!visitChild(node, 0)) return false;
+                add(IRSTR(IR_BEQZ, getLabel("CONDITIONAL_FALSE")));
+                if (!visitChild(node, 2)) return false;
+                add(IRSTR(IR_BR, getLabel("CONDITIONAL_END")));
+                add(IRSTR(IR_LABEL, getLabel("CONDITIONAL_FALSE")));
+                if (!visitChild(node, 4)) return false;
+                add(IRSTR(IR_LABEL, getLabel("CONDITIONAL_END")));
+                return true;
+            } else 
+                return appendErrorInfo("Conditional: Undefined conditional syntax.", NRC);
+        }
         case NK_DECLARATION: { // type Identifier [Assign Expression]
             Token name = getTokenChild(node, 1);
             int id = checkRedeclaration(name.identifier);
@@ -224,7 +247,7 @@ bool MontConceiver::visit(MontNodePtr node) {
                 flag = appendErrorInfo("Function: Function name not 'main'.", node);
             else {
                 int oldPointer = variablePointer;
-                add(IRSTR(IR_MARK, identifier.identifier));
+                add(IRSTR(IR_LABEL, identifier.identifier));
                 add(IRINT(IR_BUILDFRAME, node->memorySize)); 
                 pushFrame(true);
                 flag = visitChild(node, 4);
@@ -238,6 +261,26 @@ bool MontConceiver::visit(MontNodePtr node) {
             }
             return flag;
             break;
+        }
+        case NK_IF: {
+            int labelId = labelCounter ++;
+            if (node->expansion == NE_IF_SIMPLE) { // If LParen expression RParen statement
+                if (!visitChild(node, 2)) return false;
+                add(IRSTR(IR_BEQZ, getLabel("IF_END")));
+                if (!visitChild(node, 4)) return false;
+                add(IRSTR(IR_LABEL, getLabel("IF_END")));
+                return true;
+            } else if (node->expansion == NE_IF_ELSE) { // If LParen expression RParen statement Else statement
+                if (!visitChild(node, 2)) return false;
+                add(IRSTR(IR_BEQZ, getLabel("IF_ELSE")));
+                if (!visitChild(node, 4)) return false;
+                add(IRSTR(IR_BR, getLabel("IF_END")));
+                add(IRSTR(IR_LABEL, getLabel("IF_ELSE")));
+                if (!visitChild(node, 6)) return false;
+                add(IRSTR(IR_LABEL, getLabel("IF_END")));
+                return true;
+            } else 
+                return appendErrorInfo("If: Undefined if syntax.", NRC);
         }
         case NK_LOGICAL_AND: {
             if (node->expansion == NE_LAND_LEAF) 
@@ -348,9 +391,13 @@ bool MontConceiver::visit(MontNodePtr node) {
                 }
                 case NE_STATEMENT_CODEBLOCK: {
                     pushFrame(false);
-                    flag = visitChild(node, 1);
+                    flag = visitChild(node, 0);
                     popFrame();
                     return flag;
+                    break;
+                }
+                case NE_STATEMENT_IF: {
+                    return visitChild(node, 0);
                     break;
                 }
                 case NE_STATEMENT_EMPTY: {

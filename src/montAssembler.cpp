@@ -20,6 +20,6 @@ bool MontAssembler::assemble(MontConceiver& conc){
     //write("main:", 0);
     int s = conc.irs.size();
     for (int i=0;i<s;i++) 
-        write(conc.irs[i].toAssembly(), conc.irs[i].code == IR_MARK ? 0 : 1);
+        write(conc.irs[i].toAssembly(), conc.irs[i].code == IR_LABEL ? 0 : 1);
     return true;
 }

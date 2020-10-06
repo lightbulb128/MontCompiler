@@ -106,6 +106,6 @@ int main(int argc, const char* argv[]){
     if (argv[1][0] == 'l') return onlyLexer(argv[2]);
     else if (argv[1][0] == 'p') return onlyParser(argv[2]);
     else if (argv[1][0] == 'c') return onlyConceiver(argv[2]);
-    else if (compile(argv[1])) return 0;
-    return -1; 
+    else if (argv[1][0] == 'a') return compile(argv[2]) ? 0 : -1;
+    else return compile(argv[1]) ? 0 : -1;
 }
