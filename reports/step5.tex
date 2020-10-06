@@ -63,6 +63,7 @@
                 据此还原原先的\T{fp}和\T{ra}（分别位于\T{sp}下4位和8位）。生成的具体代码详见下一节。
                 。当遍历AST遇到函数末尾，而当前最后一条指令并非 \T{ret} 时
                 ，自动生成 \T{PUSH 0} 和 \T{RET} 语句。
+                \item[*] \T{LABEL} 标记函数起始处或跳转标记，在 step6 中会使用到。
             \end{itemize}
 
             在此步骤中同时检查变量的声明是否重复以及使用变量是是否已经定义。
@@ -76,6 +77,7 @@
                 \item[*] \T{[POP]} \T{addi sp, sp, 4;} 
                 \item[*] \T{[RET]} \T{lw a0, 0(sp); addi sp, sp, 4; ori sp, fp, 0; } 
                 \T{lw ra, -4(sp); lw fp, -8(sp); jr ra;} 
+                \item[*] \T{[LABEL]} \T{LABEL\_NAME: }
             \end{itemize}
         
     \section{思考题}
