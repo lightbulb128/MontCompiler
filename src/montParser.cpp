@@ -365,6 +365,55 @@ bool MontNode::tryParseIf(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
+bool MontNode::tryParseFor(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse for " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_FOR;
+    if (!ptr->tryParse(lexer, TK_FOR) || !ptr->tryParse(lexer, TK_LPAREN)) 
+        PARSEFAIL("For: Expect for keyword and LParen syntax.");
+    Token peek = lexer.peek();
+    if (isTypeToken(peek)) { 
+        // For LParen declaration Semicolon expression Semicolon expression RParen statement
+        ptr->expansion = NE_FOR_DECLARATION;
+        if (!ptr->tryParseDeclaration(lexer)) 
+            PARSEFAIL("For: Invalid for syntax with declaration init.");
+    } else {
+        ptr->expansion = NE_FOR_EXPRESSION;
+        // For LParen expression Semicolon expression Semicolon expression RParen statement
+        if (!ptr->tryParseExpression(lexer)) 
+            PARSEFAIL("For: Invalid for syntax with expression init.");
+    }
+    if (!ptr->tryParse(lexer, TK_SEMICOLON) || !ptr->tryParseExpression(lexer) 
+        || !ptr->tryParse(lexer, TK_SEMICOLON) || !ptr->tryParseExpression(lexer) 
+        || !ptr->tryParse(lexer, TK_RPAREN) || !ptr->tryParseStatement(lexer)) 
+        PARSEFAIL("For: Invalid for body.");
+    if (DEBUG) cout << "ok parsed for" << endl;
+    addChildren(ptr); return true;
+}
+
+bool MontNode::tryParseWhile(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse while " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_WHILE;
+    Token peek = lexer.peek();
+    if (peek.tokenKind == TK_WHILE) {
+        // While LParen expression RParen statement
+        ptr->expansion = NE_WHILE_STANDARD;
+        if (!ptr->tryParse(lexer, TK_WHILE) || !ptr->tryParse(lexer, TK_LPAREN)
+            || !ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_RPAREN) 
+            || !ptr->tryParseStatement(lexer))
+            PARSEFAIL("While: Invalid while-loop syntax.");
+    } else {
+        // Do statement While LParen expression RParen Semicolon
+        ptr->expansion = NE_WHILE_DO;
+        if (!ptr->tryParse(lexer, TK_DO) || !ptr->tryParseStatement(lexer) 
+            || !ptr->tryParse(lexer, TK_WHILE)
+            || !ptr->tryParse(lexer, TK_LPAREN) || !ptr->tryParseExpression(lexer) 
+            || !ptr->tryParse(lexer, TK_RPAREN) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
+            PARSEFAIL("While: Invalid do-while syntax.");
+    }
+    if (DEBUG) cout << "ok parsed while" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::tryParseBlockitem(MontLexer& lexer) {
     if (DEBUG) cout << "try parse blockitem " << lexer.peek() << endl;
     Token peek = lexer.peek();
@@ -410,6 +459,30 @@ bool MontNode::tryParseStatement(MontLexer& lexer) {
             PARSEFAIL("Statement: Illegal if statement.");
         if (DEBUG) cout << "ok parsed statement if" << endl;
         addChildren(ptr); return true;
+    } else if (peek.tokenKind == TK_FOR) {
+        ptr->expansion = NE_STATEMENT_FOR;
+        if (!ptr->tryParseFor(lexer)) 
+            PARSEFAIL("Statement: Illegal for statement.");
+        if (DEBUG) cout << "ok parsed statement for" << endl;
+        addChildren(ptr); return true;
+    } else if (peek.tokenKind == TK_WHILE || peek.tokenKind == TK_DO) {
+        ptr->expansion = NE_STATEMENT_WHILE;
+        if (!ptr->tryParseWhile(lexer)) 
+            PARSEFAIL("Statement: Illegal while loop statement.");
+        if (DEBUG) cout << "ok parsed statement whileloop" << endl;
+        addChildren(ptr); return true;
+    } else if (peek.tokenKind == TK_BREAK) {
+        ptr->expansion = NE_STATEMENT_BREAK;
+        if (!ptr->tryParse(lexer, TK_BREAK) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
+            PARSEFAIL("Statement: Illegal break statement.");
+        if (DEBUG) cout << "ok parsed statement break" << endl;
+        addChildren(ptr); return true; 
+    } else if (peek.tokenKind == TK_CONTINUE) {
+        ptr->expansion = NE_STATEMENT_CONTINUE;
+        if (!ptr->tryParse(lexer, TK_CONTINUE) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
+            PARSEFAIL("Statement: Illegal continue statement.");
+        if (DEBUG) cout << "ok parsed statement continue" << endl;
+        addChildren(ptr); return true; 
     } else {
         ptr->expansion = NE_STATEMENT_EXPRESSION;
         if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
@@ -476,7 +549,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         children[0]->output(tab, lastchild, out);
         return;
     }
-    out << tab; out << "o---";
+    out << tab; out << "o-";
     if (kind==NK_TOKEN) {
         MontTokenNode* n = (MontTokenNode*) this;
         out << (*n).getToken() << endl;
@@ -506,6 +579,8 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NK_CONDITIONAL:out << "conditional"; break;
         case NK_IF:         out << "if"; break;
         case NK_UNDEFINED:  out << "undefined"; break;
+        case NK_FOR:        out << "for"; break;
+        case NK_WHILE:      out << "while"; break;
         default: out << "???"; break;
     }
     if (expansion != NE_NONE) out << " - ";
@@ -522,6 +597,8 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_DECLARATION_SIMPLE: out << "simple"; break;
         case NE_EQUALITY_INNER: out << "inner"; break;
         case NE_EQUALITY_LEAF: out << "leaf"; break;
+        case NE_FOR_EXPRESSION: out << "expression"; break;
+        case NE_FOR_DECLARATION: out << "declaration"; break;
         case NE_IF_ELSE: out << "else"; break;
         case NE_IF_SIMPLE: out << "simple"; break;
         case NE_LAND_INNER: out << "inner"; break;
@@ -540,13 +617,19 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_STATEMENT_RETURN: out << "return"; break;
         case NE_STATEMENT_CODEBLOCK: out << "codeblock"; break;
         case NE_STATEMENT_IF: out << "if"; break;
+        case NE_STATEMENT_BREAK: out << "break"; break;
+        case NE_STATEMENT_CONTINUE: out << "continue"; break;
+        case NE_STATEMENT_FOR: out << "for"; break;
+        case NE_STATEMENT_WHILE: out << "while"; break;
         case NE_UNARY_OPERATION: out << "operation"; break;
         case NE_UNARY_PRIMARY: out << "primary"; break;
+        case NE_WHILE_DO: out << "do"; break;
+        case NE_WHILE_STANDARD: out << "standard"; break;
     }
     //out << " {" << endl;
     out << endl;
     int cnt = children.size();
-    string newtab = tab + (lastchild ? "    " : "|   ");
+    string newtab = tab + (lastchild ? "  " : "| ");
     for (int i=0;i<cnt-1;i++) 
         children[i]->output(newtab, false, out);
     if (cnt>0)

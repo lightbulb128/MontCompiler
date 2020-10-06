@@ -241,6 +241,28 @@ bool MontConceiver::visit(MontNodePtr node) {
             return visitChild(node, 0);
             break;
         }
+        case NK_FOR: { // For ( pre ; expr ; expr ) statement
+            if (node->expansion != NE_FOR_DECLARATION && node->expansion != NE_FOR_EXPRESSION)
+                return appendErrorInfo("For: Undefined for syntax.", NRC); 
+            int labelId = labelCounter ++; pushLoop(labelId);
+            pushFrame(false);
+            if (!visitChild(node, 2)) return false;
+            if (node->expansion == NE_FOR_EXPRESSION) 
+                add(IRSIM(IR_POP));
+            add(IRSTR(IR_LABEL, getLabel("LOOP_BEGIN")));
+            if (!visitChild(node, 4)) return false;
+            add(IRSTR(IR_BEQZ, getLabel("LOOP_BREAK")));
+            pushFrame(false);
+            if (!visitChild(node, 8)) return false;
+            add(IRSTR(IR_LABEL, getLabel("LOOP_CONTINUE")));
+            if (!visitChild(node, 6)) return false;
+            popFrame();
+            add(IRSTR(IR_BR, getLabel("LOOP_BEGIN")));
+            add(IRSTR(IR_LABEL, getLabel("LOOP_BREAK")));
+            popFrame();
+            return true;
+            break;
+        }
         case NK_FUNCTION: {
             Token identifier = getTokenChild(node, 1);
             if (identifier.identifier!="main") 
@@ -404,6 +426,26 @@ bool MontConceiver::visit(MontNodePtr node) {
                     return true; 
                     break;
                 }
+                case NE_STATEMENT_FOR: {
+                    return visitChild(node, 0);
+                }
+                case NE_STATEMENT_WHILE: {
+                    return visitChild(node, 0);
+                }
+                case NE_STATEMENT_BREAK: {
+                    int labelId = getCurrentLoop();
+                    if (labelId == -1) 
+                        return appendErrorInfo("Statement: Break not in a loop.", NRC);
+                    add(IRSTR(IR_BR, getLabel("LOOP_BREAK")));
+                    return true;
+                }
+                case NE_STATEMENT_CONTINUE: {
+                    int labelId = getCurrentLoop();
+                    if (labelId == -1) 
+                        return appendErrorInfo("Statement: Continue not in a loop.", NRC);
+                    add(IRSTR(IR_BR, getLabel("LOOP_CONTINUE")));
+                    return true;
+                }
                 default: {
                     return appendErrorInfo("Statement: Undefined statement type.", node->row, node->column);
                 }
@@ -446,6 +488,26 @@ bool MontConceiver::visit(MontNodePtr node) {
             int value = valueToken.value;
             add(IRINT(IR_PUSH, value));
             return true;
+            break;
+        }
+        case NK_WHILE: { // While ( expr ) statement | Do statement While ( expr ) ; 
+            if (node->expansion != NE_WHILE_STANDARD && node->expansion != NE_WHILE_DO)
+                return appendErrorInfo("For: Undefined while syntax.", NRC); 
+            int labelId = labelCounter ++; pushLoop(labelId);
+            pushFrame(false);
+            bool doloop = node->expansion == NE_WHILE_DO;
+            if (doloop)
+                if (!visitChild(node, 1)) return false;
+            add(IRSTR(IR_LABEL, getLabel("LOOP_BEGIN")));
+            if (!visitChild(node, doloop ? 4 : 2)) return false;
+            add(IRSTR(IR_BEQZ, getLabel("LOOP_BREAK")));
+            pushFrame(false);
+            if (!visitChild(node, doloop ? 1 : 4)) return false;
+            add(IRSTR(IR_LABEL, getLabel("LOOP_CONTINUE")));
+            popFrame();
+            add(IRSTR(IR_BR, getLabel("LOOP_BEGIN")));
+            add(IRSTR(IR_LABEL, getLabel("LOOP_BREAK")));
+            popFrame();
             break;
         }
         default:{

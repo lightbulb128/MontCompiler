@@ -63,6 +63,11 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_ELSE: stream << "Else"; break;
         case TK_QUESTION: stream << "Question ?"; break;
         case TK_COLON: stream << "Colon :"; break;
+        case TK_FOR: stream << "For"; break;
+        case TK_WHILE: stream << "While"; break;
+        case TK_DO: stream << "Do"; break;
+        case TK_CONTINUE: stream << "Continue"; break;
+        case TK_BREAK: stream << "Break"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -382,11 +387,16 @@ void MontLexer::addKeyword(const char* keyword, TokenKind tk) {
 
 void MontLexer::addDefaultKeywords(){
     // please add keywords by alphabetical order
+    addKeyword("break", TK_BREAK);
     addKeyword("char", TK_CHAR);
+    addKeyword("continue", TK_CONTINUE);
+    addKeyword("do", TK_DO);
     addKeyword("else", TK_ELSE);
+    addKeyword("for", TK_FOR);
     addKeyword("if", TK_IF);
     addKeyword("int", TK_INT);
     addKeyword("return", TK_RETURN);
+    addKeyword("while", TK_WHILE);
 }
 
 void MontLexer::putback(Token token) {

@@ -22,7 +22,8 @@ enum TokenKind {
     // values
     TK_INT_VALUE, TK_CHAR_VALUE,
     // keywords
-    TK_RETURN, TK_INT, TK_CHAR,
+    TK_RETURN, TK_INT, TK_CHAR, TK_IF, TK_ELSE, 
+    TK_FOR, TK_WHILE, TK_DO, TK_CONTINUE, TK_BREAK,
     // symbols
     TK_LPAREN, TK_RPAREN, TK_LBRACE, TK_RBRACE, TK_SEMICOLON, 
     TK_COMMA, 
@@ -33,7 +34,7 @@ enum TokenKind {
     TK_ASSIGN,
     TK_PLUS, TK_ASTERISK, TK_LSLASH, TK_PERCENT, 
     TK_LOR, TK_LAND, TK_OR, TK_AND, 
-    TK_QUESTION, TK_COLON, TK_IF, TK_ELSE,  // step 6
+    TK_QUESTION, TK_COLON, 
     // eof
     TK_EOF, 
     // error

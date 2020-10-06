@@ -4,7 +4,9 @@
 #include "montLog.h"
 #include "montParser.h"
 #include <vector>
+#include <stack>
 using std::vector;
+using std::stack;
 
 #include <string>
 using std::string;
@@ -98,11 +100,15 @@ private:
     vector<MontStackFrame> frames;
     int variablePointer; // 指示当前要加入的变量是第几个局部变量，从0开始。
     int labelCounter; // 指示加入的label的名称。
+    stack<int> loops;
     void pushIdentifier(string name, IdentifierType type = IT_VARIABLE);
     void pushFrame(bool blocking);
     void popFrame();
     int getIdentifier(string name); // 未查询到结果时返回-1，查询到结果应当为声明该变量时对应的variablePointer
     int checkRedeclaration(string name); // 仅查询本块内，即本frame中的
+    void pushLoop(int id){loops.push(id);}
+    int getCurrentLoop(){return (loops.size()>0) ? loops.top() : -1;}
+    void popLoop(){loops.pop();}
 public:
     static string getErrorInfo(){return logger.get();}
     void add(MontIntermediate m){irs.push_back(m);}
@@ -119,6 +125,7 @@ public:
         labelCounter = 0;
         irs = vector<MontIntermediate>();
         frames = vector<MontStackFrame>(); 
+        loops = stack<int>();
         return visit(p.program);
     }
     friend std::ostream& operator <<(std::ostream& stream, MontConceiver& c);

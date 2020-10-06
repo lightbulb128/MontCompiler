@@ -8,6 +8,14 @@ statement   :   expression Semicolon                                STATEMENT_EX
             |   Semicolon                                           STATEMENT_EMPTY
             |   codeblock                                           STATEMENT_CODEBLOCK
             |   if                                                  STATEMENT_IF
+            |   for                                                 STATEMENT_FOR
+            |   while                                               STATEMENT_WHILE
+            |   Break Semicolon                                     STATEMENT_BREAK
+            |   Continue Semicolon                                  STATEMENT_CONTINUE
+for         :   For LP expression SC expr SC expr RP statement      FOR_EXPRESSION
+            |   For LP declaration SC expr SC expr RP statement     FOR_DECLARATION
+while       :   While LP expression RP statement                    WHILE_STANDARD
+            |   Do statement While LP expression RP SC              WHILE_DO
 if          :   If LP expression RP statement                       IF_SIMPLE
             :   If LP expression RP statement Else statement        IF_ELSE
 declaration :   type Identifier                                     DECLARATION_SIMPLE
