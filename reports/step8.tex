@@ -1,0 +1,71 @@
+\documentclass[UTF8]{ctexart}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{subfigure}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{diagbox}
+\usepackage{bm}
+\usepackage{color}
+
+\usepackage{enumitem}
+\setitemize[1]{itemsep=0pt, partopsep=0pt, parsep=\parskip, topsep=5pt}
+
+\usepackage{listings}
+\lstdefinestyle{lfonts}{
+    basicstyle = \ttfamily
+}
+
+\newcommand{\T}[1]{\texttt{{#1}}}
+\title{Step 8 Report}
+\author{刘轩奇 2018011025}
+\date{2020年10月6日}
+\geometry{left=2.0cm, right=2.0cm, top=2.5cm, bottom=2.5cm}
+\begin{document}
+    \maketitle
+    \section{工作内容}
+        本人选择不使用辅助工具 ANTLR 因此自己实现了 lexer 和 parser。
+        \subsection{文件说明} 
+            \T{montLexer.h/cpp} 词法分析器；
+
+            \T{montParser.h/cpp} 语法分析器；
+
+            \T{montConceiver.h/cpp} 产生中间代码；
+
+            \T{montAssembler.h/cpp} 从中间代码产生汇编代码；
+            
+            \T{montLog.h} 记录编译错误信息；
+
+            \T{montCompiler.cpp} MiniDecaf 编译器，包含主函数，编译成功返回 0 否则返回 -1，
+            并将错误信息输出到 \T{std::cerr}。
+        
+        \subsection{本步骤完成的工作}
+
+            \paragraph{1 词法分析} 添加了新的 Token：
+            \begin{itemize}
+                \item[*] \T{FOR} 关键字 for；
+                \item[*] \T{WHILE} 关键字 while；
+                \item[*] \T{DO} 关键字 do；
+                \item[*] \T{BREAK} 关键字 break；
+                \item[*] \T{CONTINUE} 关键字 continue。   
+            \end{itemize}
+
+            \paragraph{2 句法分析} 添加或修改了以下的 AST 节点：
+            \begin{itemize}
+                \item[*] \T{statement} 现在可以生成 \T{for}, \T{while}, \T{do-while} 循环对应的节点，以及 \T{continue}, \T{break} 语句对应的节点。
+                \item[*] \T{while} 此类型节点包括 \T{while} 和 \T{do-while} 两种循环类型。
+                \item[*] \T{for} 此类型节点表示 \T{for} 循环。
+                \item[*] \T{empty} 空节点。这种节点是为了提供一个占位，因为 \T{for} 循环的三个表达式可能为空。 
+            \end{itemize}
+
+            \paragraph{3 产生中间代码} 根据指导书产生相应的中间代码即可。其中需要注意的是 \T{for} 循环中三个表达式若非空则还应当生成
+            对应的 \T{POP} 代码。
+
+            \paragraph{4 产生汇编代码} 没有改变。
+        
+    \section{思考题}
+        \paragraph{1} while 循环的两种翻译方式哪一种更好？
+        \paragraph{答} 第二种更好。假设循环体恰好执行且仅执行一次，则第一种翻译方式执行了两次跳转，
+        第二种翻译方式没有执行跳转。
+\end{document}
