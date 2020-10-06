@@ -254,7 +254,8 @@ bool MontConceiver::visit(MontNodePtr node) {
                 add(IRSIM(IR_POP));
             add(IRSTR(IR_LABEL, getLabel("LOOP_BEGIN")));
             if (!visitChild(node, 4)) return false;
-            add(IRSTR(IR_BEQZ, getLabel("LOOP_BREAK")));
+            if (node->children[4]->kind != NK_EMPTY)
+                add(IRSTR(IR_BEQZ, getLabel("LOOP_BREAK")));
             pushFrame(false);
             if (!visitChild(node, 8)) return false;
             add(IRSTR(IR_LABEL, getLabel("LOOP_CONTINUE")));
