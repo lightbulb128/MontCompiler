@@ -47,7 +47,7 @@
             \paragraph{2 句法分析} 添加了以下新的 AST 节点，对应于指导书给出的非终结符：
             \begin{itemize}
                 \item[*] \T{assignment}
-                \item[*] \T{declaration} 
+                \item[*] \T{declaration}  
             \end{itemize}
 
             对 \T{statement} 的处理与指导书上有所不同，分为五种，即return语句、变量定义语句、表达式语句、
@@ -66,8 +66,13 @@
                 \item[*] \T{LABEL} 标记函数起始处或跳转标记，在 step6 中会使用到。
             \end{itemize}
 
-            在此步骤中同时检查变量的声明是否重复以及使用变量是是否已经定义。
-
+            在此步骤中同时检查变量的声明是否重复以及使用变量是是否已经定义。由于之前已经添加了
+            对 \T{codeblock} 节点（等同于step7中的\T{compound\_statement}）的支持，则在这一步中
+            每次进入一个函数的 \T{codeblock} 时，添加一个栈帧，而每次进入普通块语句（例如 \T{if} 的块语句，
+            或者是任意函数中突然出现的块语句）时，也添加一个帧（但不是栈帧，因为仍可以访问之前帧的变量）。
+            退出块语句时弹出帧或栈帧。检查重复变量声明时只检查当前帧（即当前块中的变量），而检查变量使用时
+            从当前帧开始往前检查直到检查到栈帧，找到变量则使用该变量，否则报错。如此实现，则step7的工作也基本完成了。
+ 
             \paragraph{4 产生汇编代码} 新的或修改的中间代码将生成对应的汇编代码：
             \begin{itemize}
                 \item[*] \T{[BUILDFRAME]} \T{sw ra, -4(sp); sw fp, -8(sp); ori fp, sp, 0; addi sp, sp, -8+4*k;}
