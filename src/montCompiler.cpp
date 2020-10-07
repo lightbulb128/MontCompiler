@@ -130,10 +130,21 @@ int onlyType(const char* filename) {
 }
 
 int main(int argc, const char* argv[]){
-    if (argv[1][0] == 'l') return onlyLexer(argv[2]);
-    else if (argv[1][0] == 'p') return onlyParser(argv[2]);
-    else if (argv[1][0] == 'c') return onlyConceiver(argv[2]);
-    else if (argv[1][0] == 't') return onlyType(argv[2]);
-    else if (argv[1][0] == 'a') return compile(argv[2]) ? 0 : -1;
+    if (argv[1][0] == '-') {
+        if (argv[1][1] == 'l') return onlyLexer(argv[2]);
+        else if (argv[1][1] == 'p') return onlyParser(argv[2]);
+        else if (argv[1][1] == 'c') return onlyConceiver(argv[2]);
+        else if (argv[1][1] == 't') return onlyType(argv[2]);
+        else if (argv[1][1] == 'a') return compile(argv[2]) ? 0 : -1;
+        else {
+            cout << "Usage: " << endl;
+            cout << "-l Lexer." << endl; 
+            cout << "-p Parser." << endl; 
+            cout << "-c Conceiver." << endl; 
+            cout << "-t Parser & types." << endl; 
+            cout << "-a Assembly." << endl; 
+            return -1;
+        }
+    }
     else return compile(argv[1]) ? 0 : -1;
 }

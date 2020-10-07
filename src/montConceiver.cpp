@@ -294,6 +294,9 @@ bool MontConceiver::visit(MontNodePtr node) {
             DETERMINECHILD(0)
             break;
         }
+        case NK_EXPRLIST: {
+            return appendErrorInfo("Exprlist: Should not conceive exprlist internly.",NRC);
+        }
         case NK_FOR: { // For ( pre ; expr ; expr ) statement
             if (node->expansion != NE_FOR_DECLARATION && node->expansion != NE_FOR_EXPRESSION)
                 return appendErrorInfo("For: Undefined for syntax.", NRC); 
@@ -332,9 +335,15 @@ bool MontConceiver::visit(MontNodePtr node) {
             // 产生参数列表
             Mnp plist = node->children[3]; // type identifier Comma type identifier Comma ...
             int parameterCount = (plist->children.size()+1)/3;
+            vector<string> parameterNames = vector<string>();
             for (int i=0;i<parameterCount;i++) {
                 Token typetoken = getTokenChild(plist->children[i*3], 0);
                 MontDatatype ptype = getType(typetoken);
+                Token nametoken = getTokenChild(plist, i*3+1);
+                for (int j=0;j<i;j++) 
+                    if (parameterNames[j]==nametoken.identifier)
+                        return appendErrorInfo("Function: Parameter identifier repetitive.", NRC);
+                parameterNames.push_back(nametoken.identifier);
                 if (ptype == DT_VOID) 
                     return appendErrorInfo("Function: Void parameter.", NRC);
                 newfunc.addPara(ptype);
@@ -460,7 +469,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             break;
         }
         case NK_PARAMETERS: {
-            return appendErrorInfo("Parameters: Should not conceiver parameters internly.",NRC);
+            return appendErrorInfo("Parameters: Should not conceive parameters internly.",NRC);
         }
         case NK_POSTFIX: {
             if (node->expansion == NE_POSTFIX_PRIMARY) 
@@ -508,8 +517,17 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_PROGRAM: {
             int s = node->children.size();
-            for (int i=0;i<s-1;i++) 
+            int mainId = -1;
+            for (int i=0;i<s-1;i++) {
+                Mnp fnode = node->children[i];
+                Token identifier = getTokenChild(fnode, 1);
+                if (identifier.identifier == "main") {mainId = i; break;}
+            }
+            if (mainId == -1) 
+                return appendErrorInfo("Program: No main function found.", NRC);
+            for (int i=0;i<s-1;i++) {
                 if (!visitChild(node, i)) return false;
+            }
             return true;
             break;
         }
