@@ -40,7 +40,7 @@ bool MontAssembler::assemble(MontConceiver& conc){
         write();
         write(".bss");
         for (int i=0;i<s;i++) 
-            write(".comm " + conc.data[i].name + ", 4, 4");
+            write(".comm " + conc.bss[i].name + ", 4, 4");
     }
     return true;
 
