@@ -34,6 +34,7 @@ string MontIntermediate::toString(){
         case IR_EQ: return "EQ";
         case IR_FRAMEADDR: return "FRAMEADDR " + to_string(num);
         case IR_GE: return "GE";
+        case IR_GLOBADDR: return "GLOBADDR " + str;
         case IR_GT: return "GT";
         case IR_LABEL: return str + ":";
         case IR_LAND: return "LAND";
@@ -92,6 +93,9 @@ string MontIntermediate::toAssembly(){
         case IR_GE: return LW2 + 
                 _L("slt t1, t1, t2") +
                 _L("xori t1, t1, 1") + BSP + SW1;
+        case IR_GLOBADDR: return 
+                _L("addi sp, sp, -4") +
+                _L("la t1, " + str) + SW1;
         case IR_GT: return LW2 + _L("sgt t1, t1, t2") + BSP + SW1;
         case IR_LABEL: return str + ":";
         case IR_LAND: return LW2 +
@@ -194,17 +198,17 @@ bool MontConceiver::visit(MontNodePtr node) {
             else if (node->expansion == NE_ASSIGNMENT_ASSIGN) { // Identifier Assign expression
                 Token name = getTokenChild(node, 0);
                 MontDatatype type;
-                int id = getVariable(name.identifier, &type);
-                setNodeType(node, type);
-                if (id==-1) 
-                    return appendErrorInfo("Assignment: Undefined identifier: " + name.identifier + ".", NRC);
                 flag = visitChild(node, 2);
                 if (isVoid(node->children[2])) 
                     return appendErrorInfo("Assignent: Expression is void.", NRC);
+                //cerr << type << node->children[2]->datatype << endl;
+                if (!flag) return false;
+                flag = getVariable(name.identifier, &type);
+                if (!flag) 
+                    return appendErrorInfo("Assignment: Undefined identifier: " + name.identifier + ".", NRC);
                 if (!parseType(type, node->children[2]->datatype))
                     return appendErrorInfo("Assignment: Value type does not match.",NRC);
-                if (!flag) return false;
-                add(IRINT(IR_FRAMEADDR, id));
+                setNodeType(node, type);
                 add(IRSIM(IR_STORE));
                 return true;
             } else 
@@ -260,8 +264,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             } else if (node->expansion == NE_DECLARATION_SIMPLE) 
                 add(IRINT(IR_PUSH, 0));
             else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
-            id = getVariable(name.identifier, nullptr);
-            add(IRINT(IR_FRAMEADDR, id));
+            getVariable(name.identifier, nullptr); 
             add(IRSIM(IR_STORE));
             add(IRSIM(IR_POP));
             return true;
@@ -330,6 +333,8 @@ bool MontConceiver::visit(MontNodePtr node) {
             if (node->children[0]->kind == NK_TYPE) 
                 type = getType(getTokenChild(node->children[0], 0));
             Token identifier = getTokenChild(node, 1);
+            if (checkGlobal(identifier.identifier, false)) 
+                return appendErrorInfo("Function: Function name conflicts with global variable.", NRC);
             int functionId = getFunction(identifier.identifier);
             MontFunction newfunc = MontFunction(identifier.identifier, type);
             // 产生参数列表
@@ -386,6 +391,19 @@ bool MontConceiver::visit(MontNodePtr node) {
             }
             return flag;
             break;
+        }
+        case NK_GLOBDECL: { // type Identifier (Assign Value)? Semicolon
+            string name = getTokenChild(node, 1).identifier; 
+            MontDatatype type = getType(getTokenChild(node->children[0], 0));
+            if (checkGlobal(name, true)) 
+                return appendErrorInfo("Globdecl: Global variable conflicts with a defined variable/function.", NRC);
+            if (node->children.size() == 3) {
+                pushBSS(name, type);
+            } else if (node->children.size() == 5) {
+                pushData(name, type, getValue(node->children[3]));
+            } else 
+                return appendErrorInfo("Globdecl: Undefined globdecl syntax.", NRC);
+            return true;
         }
         case NK_IF: {
             int labelId = labelCounter ++;
@@ -506,10 +524,9 @@ bool MontConceiver::visit(MontNodePtr node) {
             else if (node->expansion == NE_PRIMARY_IDENTIFIER) {
                 Token name = getTokenChild(node, 0);
                 MontDatatype type;
-                int id = getVariable(name.identifier, &type);
+                flag = getVariable(name.identifier, &type); 
+                if (!flag) return appendErrorInfo("Primary: Undefined identifier: " + name.identifier + ".", NRC);
                 setNodeType(node, type);
-                if (id==-1) return appendErrorInfo("Primary: Undefined identifier: " + name.identifier + ".", NRC);
-                add(IRINT(IR_FRAMEADDR, id));
                 add(IRSIM(IR_LOAD));
             } else 
                 return appendErrorInfo("Primary: Undefined primary syntax.", node->row, node->column);
@@ -520,6 +537,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             int mainId = -1;
             for (int i=0;i<s-1;i++) {
                 Mnp fnode = node->children[i];
+                if (fnode->kind != NK_FUNCTION) continue;
                 Token identifier = getTokenChild(fnode, 1);
                 if (identifier.identifier == "main") {mainId = i; break;}
             }
@@ -704,10 +722,31 @@ bool MontConceiver::visit(MontNodePtr node) {
 
 }
 
+string TypeToString(MontDatatype type) {
+    switch (type) {
+        case DT_VOID: return "void";
+        case DT_BOOL: return "bool";
+        case DT_INT: return "int";
+        case DT_CHAR: return "char";
+    }
+    return "errortype";
+}
+
 ostream& operator <<(ostream& out, MontConceiver& con){
     int s = con.irs.size();
+    out << "Intermediate Code: " << endl;
     for (int i=0;i<s;i++) 
         out << con.irs[i] << std::endl;
+    
+    out << endl << "Data section: " << endl;
+    s = con.data.size();
+    for (int i=0;i<s;i++) 
+        out << con.data[i].name << " : " << TypeToString(con.data[i].type) << " = " << con.dataValues[i] << endl;
+
+    out << endl << "BSS section: " << endl;
+    s = con.bss.size();
+    for (int i=0;i<s;i++) 
+        out << con.bss[i].name << " : " << TypeToString(con.bss[i].type) << endl;
     return out;
 }
 
@@ -729,7 +768,7 @@ void MontConceiver::popFrame(){
     frames.pop_back();
 }
 
-int MontConceiver::getVariable(string name, MontDatatype* type){
+bool MontConceiver::getVariable(string name, MontDatatype* type){
     int fs = frames.size();
     for (int i=fs-1;i>=0;i--) {
         MontStackFrame& f = frames[i];
@@ -737,11 +776,27 @@ int MontConceiver::getVariable(string name, MontDatatype* type){
         for (int j=s-1;j>=0;j--) 
             if (f.identifiers[j].name == name) {
                 if (type!=nullptr) *type = f.identifiers[j].type;
-                return f.identifiers[j].location;
+                int loc = f.identifiers[j].location;
+                add(IRINT(IR_FRAMEADDR, loc));
+                return true;
             }
         if (f.blocking) break;
     }
-    return -1;
+    int s = data.size();
+    for (int i=0;i<s;i++) 
+        if (data[i].name == name) {
+            if (type!=nullptr) *type = data[i].type;
+            add(IRSTR(IR_GLOBADDR, name));
+            return true;
+        }
+    s = bss.size();
+    for (int i=0;i<s;i++) 
+        if (bss[i].name == name) {
+            if (type!=nullptr) *type = bss[i].type;
+            add(IRSTR(IR_GLOBADDR, name));
+            return true;
+        }
+    return false;
 }
 
 int MontConceiver::checkRedeclaration(string name){
@@ -813,4 +868,35 @@ bool MontConceiver::parseType(MontDatatype dest, MontDatatype src) {
     if (dest == DT_BOOL && src != DT_BOOL) add(IRSIM(IR_BOOL)); // 将整数和字符转换为布尔
     if (dest == DT_CHAR && src == DT_BOOL) return false; // 禁止将布尔转换为字符。 
     return true;
+}
+
+bool MontConceiver::checkGlobal(string name, bool checkfunction){
+    int s = data.size();
+    for (int i=0;i<s;i++) if (data[i].name==name) return true;
+    s = bss.size();
+    for (int i=0;i<s;i++) if (bss[i].name==name) return true;
+    if (checkfunction) {
+        s = functions.size();
+        for (int i=0;i<s;i++) if (functions[i].name==name) return true;
+    }
+    return false;
+}
+
+void MontConceiver::pushData(string name, MontDatatype type, int value) {
+    data.push_back(MontVariable(name, 0, type));
+    dataValues.push_back(value);
+}
+
+void MontConceiver::pushBSS(string name, MontDatatype type) {
+    bss.push_back(MontVariable(name, 0, type));
+}
+
+int MontConceiver::getValue(Mnp ptr) {
+    Token token = getTokenChild(ptr, 0);
+    switch (token.tokenKind) {
+        case TK_CHAR_VALUE: case TK_INT_VALUE: return token.value;
+        case TK_TRUE: return 1;
+        case TK_FALSE: return 0;
+    }
+    return 0;
 }

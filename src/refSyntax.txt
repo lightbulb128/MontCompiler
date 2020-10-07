@@ -1,6 +1,7 @@
-program     :   function* EOF
+program     :   (function|globdecl)* EOF
 function    :   type|Void Identifier LP parameters RP codeblock     FUNCTION_DEFINITION
             |   type|Void Identifier LP parameters RP Semicolon     FUNCTION_DECLARATION
+globdecl    :   type Identifier (Assign Value)? Semicolon                    
 parameters  :   (type Identifier (Comma type Identifier)*)?
 codeblock   :   LBrace (blockitem)* RBrace
 blockitem   :   statement                                           BLOCKITEM_STATEMENT

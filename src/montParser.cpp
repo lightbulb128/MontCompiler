@@ -621,13 +621,37 @@ bool MontNode::tryParseFunction(MontLexer& lexer) {
     addChildren(ptr); return true;
 }
 
+bool MontNode::tryParseGlobdecl(MontLexer& lexer) {
+    if (DEBUG) cout << "try parse globdecl " << lexer.peek() << endl;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_GLOBDECL;
+    if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER))
+        PARSEFAIL("Globdecl: Expect type and identifier.");
+    Token peek = lexer.peek();
+    if (peek.tokenKind == TK_ASSIGN) {
+        if (!ptr->tryParse(lexer, TK_ASSIGN) || !ptr->tryParseValue(lexer))
+            PARSEFAIL("Globdecl: Expect plain value.");
+    }
+    if (!ptr->tryParse(lexer, TK_SEMICOLON))
+        PARSEFAIL("Globdecl: Expect semicolon.");
+    if (DEBUG) cout << "ok parsed globdecl" << endl;
+    addChildren(ptr); return true;
+}
+
 bool MontNode::tryParseProgram(MontLexer& lexer) {
     if (DEBUG) cout << "try parse program " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_PROGRAM;
     Token peek = lexer.peek();
     while (peek.tokenKind != TK_EOF) {
-        if (!ptr->tryParseFunction(lexer)) 
-            PARSEFAIL("Program: Expect function declaration.");
+        peek = lexer.nextToken();
+        Token p2 = lexer.nextToken();
+        Token p3 = lexer.peek(); lexer.putback(p2); lexer.putback(peek);
+        if (p3.tokenKind == TK_LPAREN) {
+            if (!ptr->tryParseFunction(lexer)) 
+                PARSEFAIL("Program: Expect function declaration.");
+        } else {
+            if (!ptr->tryParseGlobdecl(lexer))
+                PARSEFAIL("Program: Expect global variable declartion.");
+        }
         peek = lexer.peek();
     }
     if (!ptr->tryParse(lexer, TK_EOF))
@@ -691,6 +715,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NK_PARAMETERS: out << "parameters"; break;
         case NK_EXPRLIST:   out << "exprlist"; break;
         case NK_POSTFIX:    out << "postfix"; break;
+        case NK_GLOBDECL:   out << "globdecl"; break;
         case NK_EMPTY:      out << "empty"; break;
         default: out << "???"; break;
     }

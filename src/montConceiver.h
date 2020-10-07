@@ -48,6 +48,7 @@ enum IntermediateType {
     IR_CALL, // str, int, 在调用call的时候，函数参数已经保存在栈中，int是参数个数，调用后弹出参数将返回值保存在栈顶
     IR_CALLV, // str, int 同上，但无返回值
     IR_RETV, // ret无返回值
+    IR_GLOBADDR, // str
 };
 
 struct MontVariable {
@@ -122,6 +123,9 @@ private:
     vector<MontIntermediate> irs;
     vector<MontStackFrame> frames;
     vector<MontFunction> functions;
+    vector<MontVariable> bss;
+    vector<MontVariable> data;
+    vector<int> dataValues;
     int variablePointer; // 指示当前要加入的变量是第几个局部变量，从0开始。
     int labelCounter; // 指示加入的label的名称。
     stack<int> loops;
@@ -131,9 +135,12 @@ private:
     void pushFrame(bool blocking);
     void popFrame();
     MontFunction& getCurrentFunction(){return functions[currentFunction];}
-    int getVariable(string name, MontDatatype* type); // 未查询到结果时返回-1，查询到结果应当为声明该变量时对应的variablePointer
+    bool getVariable(string name, MontDatatype* type); // 未查询到结果时返回false, 否则返回true，并产生一个frameaddr或globaddr
     int checkRedeclaration(string name); // 仅查询本块内，即本frame中的
     int getFunction(string name);
+    bool checkGlobal(string name, bool checkfunction);
+    void pushData(string name, MontDatatype type, int value);
+    void pushBSS(string name, MontDatatype type);
     MontDatatype getType(Token token);
     MontDatatype getTypeFromValue(Token token);
     static void setNodeType(MontNodePtr node, MontDatatype type) {node->datatype = type;}
@@ -146,6 +153,7 @@ private:
     static void setChar(MontNodePtr ptr){ptr->datatype = DT_CHAR;}
     static void setBool(MontNodePtr ptr){ptr->datatype = DT_BOOL;}
     static void setVoid(MontNodePtr ptr){ptr->datatype = DT_VOID;}
+    static int getValue(MontNodePtr ptr);
     bool parseType(MontDatatype dest, MontDatatype src);
     void pushLoop(int id){loops.push(id);}
     int getCurrentLoop(){return (loops.size()>0) ? loops.top() : -1;}
@@ -157,7 +165,7 @@ public:
     bool visit(MontNodePtr node);
     bool visitChildren(MontNodePtr node);
     bool visitChild(MontNodePtr node, int id){return visit(node->children[id]);}
-    Token getTokenChild(MontNodePtr node, int id){
+    static Token getTokenChild(MontNodePtr node, int id){
         MontTokenNode* ptr = (MontTokenNode*) node->children[id];
         return ptr->getToken();
     }
@@ -168,6 +176,9 @@ public:
         frames = vector<MontStackFrame>(); 
         loops = stack<int>();
         functions = vector<MontFunction>();
+        data = vector<MontVariable>();
+        bss = vector<MontVariable>();
+        dataValues = vector<int>();
         currentFunction = -1;
         return visit(p.program);
     }

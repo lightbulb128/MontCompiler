@@ -15,11 +15,32 @@ void MontAssembler::write(const string& str, int indent) {
 }
 
 bool MontAssembler::assemble(MontConceiver& conc){
+
     write(".text");
     write(".globl main");
-    //write("main:", 0);
     int s = conc.irs.size();
     for (int i=0;i<s;i++) 
         write(conc.irs[i].toAssembly(), conc.irs[i].code == IR_LABEL ? 0 : 1);
+    
+    s = conc.data.size();
+    if (s>0) {
+        write();
+        write(".data");
+        write(".align 4");
+        for (int i=0;i<s;i++) {
+            write(".size " + conc.data[i].name + ", 4");
+            write(conc.data[i].name + ":", 0);
+            write(".word " + to_string(conc.dataValues[i]));
+        }
+    }
+
+    s = conc.bss.size();
+    if (s>0) {
+        write();
+        write(".bss");
+        for (int i=0;i<s;i++) 
+            write(".comm " + conc.data[i].name + ", 4, 4");
+    }
     return true;
+
 }

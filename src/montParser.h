@@ -43,6 +43,7 @@ enum MontNodeKind {
     NK_EXPRLIST,
     NK_POSTFIX,
     NK_UNDEFINED,
+    NK_GLOBDECL, 
     NK_EMPTY, // 占位符，例如 for 的 expr 可能为空。
 };
 
@@ -167,7 +168,8 @@ public:
     bool tryParseWhile(MontLexer& lexer);
     bool tryParseParameters(MontLexer& lexer);
     bool tryParseExprlist(MontLexer& lexer);
-    bool tryParsePostfix(MontLexer& postfix);
+    bool tryParsePostfix(MontLexer& lexer);
+    bool tryParseGlobdecl(MontLexer& lexer);
     void output(string tab, bool lastchild, std::ostream& stream);
 };
 

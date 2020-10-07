@@ -20,6 +20,7 @@ public:
     void setStream(ostream* stream) {this->stream = stream;}
     void write(const string& str, int indent); // indent means 4*spaces
     void write(const string& str){write(str, 1);}
+    void write(){*stream << endl;}
     bool assemble(MontConceiver& conc);
 };
 
