@@ -28,6 +28,7 @@ bool MontAssembler::assemble(MontConceiver& conc){
         write(".data");
         write(".align 4");
         for (int i=0;i<s;i++) {
+            write(".globl " + conc.data[i].name);
             write(".size " + conc.data[i].name + ", 4");
             write(conc.data[i].name + ":", 0);
             write(".word " + to_string(conc.dataValues[i]));
