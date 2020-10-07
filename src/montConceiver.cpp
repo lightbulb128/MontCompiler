@@ -6,14 +6,18 @@
 #define IRSIM(c) (MontIntermediate::simple(c))
 #define IRINT(c, v) (MontIntermediate::intcode(c, (v)))
 #define IRSTR(c, s) (MontIntermediate::strcode(c, (s)))
+#define IRCOM(c, v, s) (MontIntermediate::comcode(c, v, s))
 #define NRC node->row, node->column
 #define LW2 string("lw t1, 4(sp)\nlw t2, 0(sp)\n")
 #define LW1 string("lw t1, 0(sp)\n")
 #define SW1 string("sw t1, 0(sp)\n")
 #define BSP string("addi sp, sp, 4\n")
 #define getLabel(desc) ".L"+to_string(labelId)+"_"+(desc)
+#define DETERMINECHILD(id) {flag = visitChild(node, id); setNodeTypeFromChild(node, id); return flag;}
 
 MontLog MontConceiver::logger = MontLog();
+
+typedef MontNodePtr Mnp;
 
 using std::ostream;
 using std::cerr;
@@ -46,8 +50,12 @@ string MontIntermediate::toString(){
         case IR_PUSH: return string("PUSH ") + to_string(num);
         case IR_REM: return "REM";
         case IR_RET: return "RET";
+        case IR_RETV: return "RETV";
         case IR_STORE: return "STORE";
         case IR_SUB: return "SUB";
+        case IR_BOOL: return "BOOL";
+        case IR_CALL: return "CALL " + str + " " + to_string(num);
+        case IR_CALLV: return "CALLV " + str + " " + to_string(num);
         default: return "IRERROR";
     }
 }
@@ -59,12 +67,20 @@ string MontIntermediate::toAssembly(){
         case IR_ADD: return LW2 + _L("add t1, t1, t2") + BSP + SW1;
         case IR_BEQZ: return LW1 + BSP + _L("beqz t1, " + str);
         case IR_BNEZ: return LW1 + BSP + _L("bnez t1, " + str);
+        case IR_BOOL: return LW1 + _L("snez t1, t1") + SW1;
         case IR_BR: return _L("j " + str);
         case IR_BUILDFRAME: return 
                 _L("sw ra, -4(sp)") + 
                 _L("sw fp, -8(sp)") + 
                 _L("ori fp, sp, 0") + 
                 _L("addi sp, sp, -" + to_string(num + 8));
+        case IR_CALL: return 
+                _L("call " + str) +
+                _L("addi sp, sp, " + to_string(num*4-4)) +
+                _L("sw a0, 0(sp)");
+        case IR_CALLV: return 
+                _L("call " + str) +
+                _L("addi sp, sp, " + to_string(num*4));
         case IR_DIV: return LW2 + _L("div t1, t1, t2") + BSP + SW1;
         case IR_EQ: return LW2 + 
                 _L("sub t1, t1, t2") + 
@@ -114,6 +130,11 @@ string MontIntermediate::toAssembly(){
                 _L("lw ra, -4(sp)") +
                 _L("lw fp, -8(sp)") + 
                 _L("jr ra"); 
+        case IR_RETV: return  
+                _L("ori sp, fp, 0") +
+                _L("lw ra, -4(sp)") +
+                _L("lw fp, -8(sp)") + 
+                _L("jr ra"); 
         case IR_STORE: return LW2 + _L("sw t1, 0(t2)") + BSP;
         case IR_SUB: return LW2 + _L("sub t1, t1, t2")+BSP+SW1;
         default: return "nop";
@@ -129,6 +150,7 @@ ostream& operator <<(ostream& out, MontIntermediate ir){
 MontConceiver::MontConceiver() {
     irs = vector<MontIntermediate>();
     frames = vector<MontStackFrame>();
+    functions = vector<MontFunction>();
 }
 
 bool MontConceiver::visitChildren(MontNodePtr ptr){
@@ -145,7 +167,7 @@ bool MontConceiver::visit(MontNodePtr node) {
         // Please add according to alphabetic order
         case NK_ADDITIVE: {
             if (node->expansion == NE_ADDITIVE_LEAF) 
-                return visitChild(node,0);
+                DETERMINECHILD(0)
             else if (node->expansion == NE_ADDITIVE_INNER) {
                 if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
                 Token op = getTokenChild(node, 1);
@@ -154,6 +176,12 @@ bool MontConceiver::visit(MontNodePtr node) {
                 else if (op.tokenKind == TK_MINUS)
                     add(IRSIM(IR_SUB));
                 else return appendErrorInfo("Additive: Expect operator token.", node->row, node->column);
+                Mnp a = node->children[0], b = node->children[2];
+                if (isVoid(a) || isVoid(b)) 
+                    return appendErrorInfo("Additive: Addition with void.", NRC);
+                else if (isInt(a) || isInt(b)) setInt(node);
+                else if (isChar(a) && isChar(b)) setChar(node);
+                else setInt(node);
                 return true;
             }
             else
@@ -161,14 +189,20 @@ bool MontConceiver::visit(MontNodePtr node) {
             break;
         }
         case NK_ASSIGNMENT: { 
-            if (node->expansion == NE_ASSIGNMENT_VALUE)
-                return visitChild(node, 0);
+            if (node->expansion == NE_ASSIGNMENT_VALUE) 
+                DETERMINECHILD(0)
             else if (node->expansion == NE_ASSIGNMENT_ASSIGN) { // Identifier Assign expression
                 Token name = getTokenChild(node, 0);
-                int id = getVariable(name.identifier);
+                MontDatatype type;
+                int id = getVariable(name.identifier, &type);
+                setNodeType(node, type);
                 if (id==-1) 
                     return appendErrorInfo("Assignment: Undefined identifier: " + name.identifier + ".", NRC);
                 flag = visitChild(node, 2);
+                if (isVoid(node->children[2])) 
+                    return appendErrorInfo("Assignent: Expression is void.", NRC);
+                if (!parseType(type, node->children[2]->datatype))
+                    return appendErrorInfo("Assignment: Value type does not match.",NRC);
                 if (!flag) return false;
                 add(IRINT(IR_FRAMEADDR, id));
                 add(IRSIM(IR_STORE));
@@ -189,9 +223,9 @@ bool MontConceiver::visit(MontNodePtr node) {
             break;
         }
         case NK_CONDITIONAL: {
-            if (node->expansion == NE_CONDITIONAL_LEAF) { // logical_or 
-                return visitChild(node, 0);
-            } else if (node->expansion == NE_CONDITIONAL_INNER) { // logical_or Question expression Colon conditional
+            if (node->expansion == NE_CONDITIONAL_LEAF)  // logical_or 
+                DETERMINECHILD(0)
+            else if (node->expansion == NE_CONDITIONAL_INNER) { // logical_or Question expression Colon conditional
                 int labelId = labelCounter ++;
                 if (!visitChild(node, 0)) return false;
                 add(IRSTR(IR_BEQZ, getLabel("CONDITIONAL_FALSE")));
@@ -200,23 +234,33 @@ bool MontConceiver::visit(MontNodePtr node) {
                 add(IRSTR(IR_LABEL, getLabel("CONDITIONAL_FALSE")));
                 if (!visitChild(node, 4)) return false;
                 add(IRSTR(IR_LABEL, getLabel("CONDITIONAL_END")));
+                Mnp a = node->children[2], b = node->children[4];
+                if (isVoid(a) || isVoid(b)) 
+                    return appendErrorInfo("Conditional: Conditional with void.", NRC);
+                else if (isInt(a) || isInt(b)) setInt(node);
+                else if (isChar(a) && isChar(b)) setChar(node);
+                else if (isBool(a) && isBool(b)) setBool(node);
+                else setInt(node);
                 return true;
             } else 
                 return appendErrorInfo("Conditional: Undefined conditional syntax.", NRC);
         }
         case NK_DECLARATION: { // type Identifier [Assign Expression]
+            Token type = getTokenChild(node->children[0], 0);
             Token name = getTokenChild(node, 1);
             int id = checkRedeclaration(name.identifier);
             if (id!=-1) 
                 return appendErrorInfo("Declaration: Variable redeclared: " + name.identifier + ".", NRC);
-            pushVariable(name.identifier);
+            pushVariable(name.identifier, getType(type));
             if (node->expansion == NE_DECLARATION_INIT) {
                 flag = visitChild(node, 3);
+                if (!parseType(getType(type), node->children[3]->datatype))
+                    return appendErrorInfo("Declaration: Value type does not match.",NRC);
                 if (!flag) return false;
             } else if (node->expansion == NE_DECLARATION_SIMPLE) 
                 add(IRINT(IR_PUSH, 0));
             else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
-            id = getVariable(name.identifier);
+            id = getVariable(name.identifier, nullptr);
             add(IRINT(IR_FRAMEADDR, id));
             add(IRSIM(IR_STORE));
             add(IRSIM(IR_POP));
@@ -227,7 +271,7 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_EQUALITY: {
             if (node->expansion == NE_EQUALITY_LEAF) 
-                return visitChild(node,0);
+                DETERMINECHILD(0)
             else if (node->expansion == NE_EQUALITY_INNER) {
                 if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
                 Token op = getTokenChild(node, 1);
@@ -236,6 +280,10 @@ bool MontConceiver::visit(MontNodePtr node) {
                 else if (op.tokenKind == TK_NOT_EQUAL)
                     add(IRSIM(IR_NEQ));
                 else return appendErrorInfo("Equality: Expect operator ==, != token.", node->row, node->column);
+                Mnp a = node->children[0], b = node->children[2];
+                if (isVoid(a) || isVoid(b)) 
+                    return appendErrorInfo("Equality: Equality with void.", NRC);
+                else setBool(node);
                 return true;
             }
             else
@@ -243,7 +291,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             break;
         }
         case NK_EXPRESSION: {
-            return visitChild(node, 0);
+            DETERMINECHILD(0)
             break;
         }
         case NK_FOR: { // For ( pre ; expr ; expr ) statement
@@ -252,7 +300,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             int labelId = labelCounter ++; pushLoop(labelId);
             pushFrame(false);
             if (!visitChild(node, 2)) return false;
-            if (node->expansion == NE_FOR_EXPRESSION && node->children[2]->kind != NK_EMPTY) 
+            if (node->expansion == NE_FOR_EXPRESSION && node->children[2]->kind != NK_EMPTY && node->children[2]->datatype != DT_VOID) 
                 add(IRSIM(IR_POP));
             add(IRSTR(IR_LABEL, getLabel("LOOP_BEGIN")));
             if (!visitChild(node, 4)) return false;
@@ -262,7 +310,7 @@ bool MontConceiver::visit(MontNodePtr node) {
             if (!visitChild(node, 8)) return false;
             add(IRSTR(IR_LABEL, getLabel("LOOP_CONTINUE")));
             if (!visitChild(node, 6)) return false;
-            if (node->children[6]->kind != NK_EMPTY)
+            if (node->children[6]->kind != NK_EMPTY && node->children[6]->datatype != DT_VOID)
                 add(IRSIM(IR_POP));
             popFrame();
             add(IRSTR(IR_BR, getLabel("LOOP_BEGIN")));
@@ -271,21 +319,59 @@ bool MontConceiver::visit(MontNodePtr node) {
             return true;
             break;
         }
-        case NK_FUNCTION: { // type|Void Identifier LP parameters RP codeblock
+        case NK_FUNCTION: { // type|Void Identifier LP parameters RP codeblock|Semicolon
+            if (node->expansion != NE_FUNCTION_DECLARATION && node->expansion != NE_FUNCTION_DEFINITION)
+                return appendErrorInfo("Function: Undefined function syntax.", NRC);
+            bool isDefinition = node->expansion == NE_FUNCTION_DEFINITION;
+            MontDatatype type = DT_VOID;
+            if (node->children[0]->kind == NK_TYPE) 
+                type = getType(getTokenChild(node->children[0], 0));
             Token identifier = getTokenChild(node, 1);
-            if (identifier.identifier!="main") 
-                flag = appendErrorInfo("Function: Function name not 'main'.", node);
-            else {
+            int functionId = getFunction(identifier.identifier);
+            MontFunction newfunc = MontFunction(identifier.identifier, type);
+            // 产生参数列表
+            Mnp plist = node->children[3]; // type identifier Comma type identifier Comma ...
+            int parameterCount = (plist->children.size()+1)/3;
+            for (int i=0;i<parameterCount;i++) {
+                Token typetoken = getTokenChild(plist->children[i*3], 0);
+                MontDatatype ptype = getType(typetoken);
+                if (ptype == DT_VOID) 
+                    return appendErrorInfo("Function: Void parameter.", NRC);
+                newfunc.addPara(ptype);
+            }
+            // 检测是否与已经声明的函数兼容
+            if (functionId != -1) {
+                MontFunction& oldfunc = functions[functionId];
+                if (oldfunc.defined && isDefinition) 
+                    return appendErrorInfo("Function: Function " + newfunc.name + " redefined.",NRC);
+                if (!oldfunc.checkConsistency(newfunc))
+                    return appendErrorInfo("Function: Function parameters inconsistant with previous declaration.", NRC);
+                if (isDefinition) oldfunc.defined = true;
+            } else {
+                functions.push_back(newfunc);
+                functionId = functions.size()-1;
+            }
+            if (isDefinition) {
+                currentFunction = functionId;
                 int oldPointer = variablePointer;
                 add(IRSTR(IR_LABEL, identifier.identifier));
                 add(IRINT(IR_BUILDFRAME, node->memorySize)); 
                 pushFrame(true);
+                // 添加参数作为局部变量
+                for (int i=0;i<parameterCount;i++) {
+                    Token parameterIdentifier = getTokenChild(plist, i*3+1);
+                    pushParameter(parameterIdentifier.identifier, newfunc.para[i], i);
+                }
                 flag = visitChild(node, 5);
+                // cerr << frames[frames.size()-1];
                 popFrame();
+                currentFunction = -1;
                 // 如若最后一条指令不是ret，则添加一个ret，默认返回值为0.
-                if (irs[irs.size()-1].code != IR_RET) {
+                if (type != DT_VOID && irs[irs.size()-1].code != IR_RET) {
                     add(IRINT(IR_PUSH, 0));
                     add(IRSIM(IR_RET));
+                } else if (type == DT_VOID && irs[irs.size()-1].code != IR_RETV) {
+                    add(IRSIM(IR_RETV));
                 }
                 variablePointer = oldPointer;
             }
@@ -314,13 +400,17 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_LOGICAL_AND: {
             if (node->expansion == NE_LAND_LEAF) 
-                return visitChild(node,0);
+                DETERMINECHILD(0)
             else if (node->expansion == NE_LAND_INNER) {
                 if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
                 Token op = getTokenChild(node, 1);
                 if (op.tokenKind == TK_LAND)
                     add(IRSIM(IR_LAND));
                 else return appendErrorInfo("Logical and: Expect operator && token.", node->row, node->column);
+                Mnp a = node->children[0], b = node->children[2];
+                if (isVoid(a) || isVoid(b)) 
+                    return appendErrorInfo("Logical and: Operation with void.", NRC);
+                else setBool(node);
                 return true;
             }
             else
@@ -329,13 +419,17 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_LOGICAL_OR: {
             if (node->expansion == NE_LOR_LEAF) 
-                return visitChild(node,0);
+                DETERMINECHILD(0)
             else if (node->expansion == NE_LOR_INNER) {
                 if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
                 Token op = getTokenChild(node, 1);
                 if (op.tokenKind == TK_LOR)
                     add(IRSIM(IR_LOR));
                 else return appendErrorInfo("Logical or: Expect operator || token.", node->row, node->column);
+                Mnp a = node->children[0], b = node->children[2];
+                if (isVoid(a) || isVoid(b)) 
+                    return appendErrorInfo("Logical or: Operation with void.", NRC);
+                else setBool(node);
                 return true;
             }
             else
@@ -344,7 +438,7 @@ bool MontConceiver::visit(MontNodePtr node) {
         }
         case NK_MULTIPLICATIVE: {
             if (node->expansion == NE_MULTIPLICATIVE_LEAF) 
-                return visitChild(node, 0);
+                DETERMINECHILD(0)
             else if (node->expansion == NE_MULTIPLICATIVE_INNER) {
                 if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
                 Token op = getTokenChild(node, 1);
@@ -355,24 +449,56 @@ bool MontConceiver::visit(MontNodePtr node) {
                 else if (op.tokenKind == TK_PERCENT)
                     add(IRSIM(IR_REM));
                 else return appendErrorInfo("Multiplicative: Expect operator token.", node->row, node->column);
+                Mnp a = node->children[0], b = node->children[2];
+                if (isVoid(a) || isVoid(b)) 
+                    return appendErrorInfo("Multiplicative: Multiplicative with void.", NRC);
+                else setInt(node);
                 return true;
             } 
             else 
                 return appendErrorInfo("Multiplicative: Undefined multiplicative syntax.", node->row, node->column);
             break;
         }
+        case NK_PARAMETERS: {
+            return appendErrorInfo("Parameters: Should not conceiver parameters internly.",NRC);
+        }
         case NK_POSTFIX: {
             if (node->expansion == NE_POSTFIX_PRIMARY) 
-                return visitChild(node, 0);
+                DETERMINECHILD(0)
+            else if (node->expansion == NE_POSTFIX_CALL) { // Identifier LParen exprlist RParen
+                string name = getTokenChild(node, 0).identifier;
+                int functionId = getFunction(name);
+                if (functionId==-1)
+                    return appendErrorInfo("Postfix: Undeclared function: " + name + ".", NRC);
+                Mnp exprlist = node->children[2]; // expr comma expr comma ...
+                int exprcount = (exprlist->children.size()+1)/2;
+                MontFunction& func = functions[functionId];
+                if (exprcount != func.para.size()) 
+                    return appendErrorInfo("Postfix: Function parameter count does not match.", NRC);
+                for (int i=exprcount-1;i>=0;i--) {
+                    if (!visitChild(exprlist, 2*i)) return false;
+                    if (!parseType(func.para[i], exprlist->children[2*i]->datatype))
+                        return appendErrorInfo("Postfix: Argument type does not match.",NRC);
+                }
+                if (func.ret == DT_VOID) 
+                    add(IRCOM(IR_CALLV, exprcount, name));
+                else 
+                    add(IRCOM(IR_CALL, exprcount, name));
+                setNodeType(node, func.ret);
+                return true;
+            } else 
+                return appendErrorInfo("Postfix: Undefined postfix syntax.", NRC);
         }
         case NK_PRIMARY: {
             if (node->expansion == NE_PRIMARY_VALUE) 
-                return visitChild(node, 0);
+                DETERMINECHILD(0)
             else if (node->expansion == NE_PRIMARY_PAREN)
-                return visitChild(node, 1); 
+                DETERMINECHILD(1)
             else if (node->expansion == NE_PRIMARY_IDENTIFIER) {
                 Token name = getTokenChild(node, 0);
-                int id = getVariable(name.identifier);
+                MontDatatype type;
+                int id = getVariable(name.identifier, &type);
+                setNodeType(node, type);
                 if (id==-1) return appendErrorInfo("Primary: Undefined identifier: " + name.identifier + ".", NRC);
                 add(IRINT(IR_FRAMEADDR, id));
                 add(IRSIM(IR_LOAD));
@@ -381,12 +507,15 @@ bool MontConceiver::visit(MontNodePtr node) {
             break;
         }
         case NK_PROGRAM: {
-            return visitChild(node, 0);
+            int s = node->children.size();
+            for (int i=0;i<s-1;i++) 
+                if (!visitChild(node, i)) return false;
+            return true;
             break;
         }
         case NK_RELATIONAL: {
             if (node->expansion == NE_RELATIONAL_LEAF) 
-                return visitChild(node,0);
+                DETERMINECHILD(0)
             else if (node->expansion == NE_RELATIONAL_INNER) {
                 if (!visitChild(node, 0) || !visitChild(node, 2)) return false;
                 Token op = getTokenChild(node, 1);
@@ -399,6 +528,10 @@ bool MontConceiver::visit(MontNodePtr node) {
                 else if (op.tokenKind == TK_LESS_EQUAL)
                     add(IRSIM(IR_LE));
                 else return appendErrorInfo("Relational: Expect operator >, >=, <, <= token.", node->row, node->column);
+                                Mnp a = node->children[0], b = node->children[2];
+                if (isVoid(a) || isVoid(b)) 
+                    return appendErrorInfo("Relational and: Relational with void.", NRC);
+                else setBool(node);
                 return true;
             }
             else
@@ -414,12 +547,26 @@ bool MontConceiver::visit(MontNodePtr node) {
                 case NE_STATEMENT_EXPRESSION: { // expression Semicolon
                     flag = visitChild(node, 0);
                     if (!flag) return false;
-                    add(IRSIM(IR_POP));
+                    if (node->children[0]->datatype != DT_VOID)
+                        add(IRSIM(IR_POP));
                     break;
                 }
-                case NE_STATEMENT_RETURN: { // Return expression Semicolon
-                    flag = visitChild(node, 1);
-                    add(IRSIM(IR_RET));
+                case NE_STATEMENT_RETURN: { // Return expression? Semicolon
+                    if (currentFunction == -1)
+                        return appendErrorInfo("Statement: Return not in function scope.", NRC);
+                    MontFunction& func = getCurrentFunction();
+                    if (func.ret == DT_VOID && node->children.size()!=2) 
+                        return appendErrorInfo("Statement: Returning value on void function.", NRC);
+                    if (func.ret != DT_VOID && node->children.size()!=3) 
+                        return appendErrorInfo("Statement: Returning void on value function.", NRC); 
+                    if (func.ret != DT_VOID) { 
+                        flag = visitChild(node, 1);
+                        if (isVoid(node->children[1])) 
+                            return appendErrorInfo("Statement: Returning void value.", NRC);
+                        add(IRSIM(IR_RET));
+                    } else {
+                        add(IRSIM(IR_RETV));
+                    }
                     return flag;
                     break;
                 }
@@ -486,10 +633,13 @@ bool MontConceiver::visit(MontNodePtr node) {
                         add(IRSIM(IR_NOT));
                     else
                         return appendErrorInfo("Unary: No operator.", node->row, node->column); 
+                    if (isVoid(node->children[1])) 
+                        return appendErrorInfo("Unary: Unary with void.", NRC);
+                    else setNodeTypeFromChild(node, 1);
                     break;
                 } 
                 case NE_UNARY_POSTFIX: { // unary : value
-                    return visitChild(node, 0);
+                    DETERMINECHILD(0)
                     break;
                 }
                 default: {
@@ -501,7 +651,9 @@ bool MontConceiver::visit(MontNodePtr node) {
         case NK_VALUE:{
             Token valueToken = getTokenChild(node, 0);
             int value = valueToken.value;
-            //std::cerr << value << endl;
+            if (valueToken.tokenKind == TK_TRUE) value = 1;
+            else if (valueToken.tokenKind == TK_FALSE) value = 0;
+            setNodeType(node, getTypeFromValue(valueToken));
             add(IRINT(IR_PUSH, value));
             return true;
             break;
@@ -541,9 +693,9 @@ ostream& operator <<(ostream& out, MontConceiver& con){
     return out;
 }
 
-void MontConceiver::pushVariable(string name){
+void MontConceiver::pushVariable(string name, MontDatatype type){
     int size = frames.size();
-    frames[size-1].push(name, variablePointer);
+    frames[size-1].push(name, variablePointer, type);
     variablePointer++;
 }
 
@@ -559,13 +711,16 @@ void MontConceiver::popFrame(){
     frames.pop_back();
 }
 
-int MontConceiver::getVariable(string name){
+int MontConceiver::getVariable(string name, MontDatatype* type){
     int fs = frames.size();
     for (int i=fs-1;i>=0;i--) {
         MontStackFrame& f = frames[i];
         int s = f.identifiers.size();
         for (int j=s-1;j>=0;j--) 
-            if (f.identifiers[j].name == name) return f.identifiers[j].location;
+            if (f.identifiers[j].name == name) {
+                if (type!=nullptr) *type = f.identifiers[j].type;
+                return f.identifiers[j].location;
+            }
         if (f.blocking) break;
     }
     return -1;
@@ -578,4 +733,66 @@ int MontConceiver::checkRedeclaration(string name){
     for (int j=s-1;j>=0;j--) 
         if (f.identifiers[j].name == name) return f.identifiers[j].location;
     return -1;
+}
+
+MontDatatype MontConceiver::getType(Token token) {
+    switch (token.tokenKind) {
+        case TK_INT: return DT_INT;
+        case TK_CHAR: return DT_CHAR;
+        case TK_BOOL: return DT_BOOL;
+        default: return DT_VOID;
+    }
+    return DT_VOID;
+}
+
+MontDatatype MontConceiver::getTypeFromValue(Token token) {
+    switch (token.tokenKind) {
+        case TK_INT_VALUE: return DT_INT;
+        case TK_CHAR_VALUE: return DT_CHAR;
+        case TK_TRUE: case TK_FALSE: return DT_BOOL;
+        default: return DT_VOID;
+    }
+    return DT_VOID;
+}
+
+int MontConceiver::getFunction(string name) {
+    int s = functions.size();
+    for (int i=0;i<s;i++) 
+        if (functions[i].name == name) return i;
+    return -1;
+}
+
+void MontConceiver::pushParameter(string name, MontDatatype type, int index) {
+    // 对于局部变量，其位置loc表示其在栈中位置为 fp - 12 - 4*loc
+    // 对于参数，其栈中位置为 fp + 4*index，从而知道其loc应当为-3-index
+    int size = frames.size();
+    frames[size-1].push(name, -3-index, type);
+}
+
+ostream& operator <<(ostream& out, MontStackFrame& frame) {
+    int s = frame.identifiers.size();
+    if (s==0) out << "No variables in frame." << endl;
+    for (int i=0;i<s;i++) 
+        out << frame.identifiers[i] << endl;
+    return out;
+}
+
+ostream& operator <<(ostream& out, MontVariable& variable) {
+    out << "[";
+    switch (variable.type) {
+        case DT_BOOL: out << "bool"; break;
+        case DT_CHAR: out << "char"; break;
+        case DT_INT: out << "int"; break;
+        case DT_VOID: out << "void"; break;
+        default: out << "???"; break;
+    }
+    out << " " << variable.name << " @ " << variable.location << "]";
+    return out;
+}
+
+bool MontConceiver::parseType(MontDatatype dest, MontDatatype src) {
+    if (src == DT_VOID || dest == DT_VOID) return false; // 禁止出现有void参与转换
+    if (dest == DT_BOOL && src != DT_BOOL) add(IRSIM(IR_BOOL)); // 将整数和字符转换为布尔
+    if (dest == DT_CHAR && src == DT_BOOL) return false; // 禁止将布尔转换为字符。 
+    return true;
 }

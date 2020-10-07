@@ -12,6 +12,7 @@ using std::cout;
 
 const bool DEBUG = false;
 const bool SHOW_ROW_LINE = true;
+bool MontParser::outputType = false;
 
 MontLog MontParser::logger = MontLog();
 
@@ -63,7 +64,7 @@ bool MontNode::tryParse(MontLexer& lexer, TokenKind tk) {
 
 bool MontNode::isValueToken(Token& token){
     TokenKind tk = token.tokenKind;
-    return (tk==TK_CHAR_VALUE || tk==TK_INT_VALUE);
+    return (tk==TK_CHAR_VALUE || tk==TK_INT_VALUE || tk==TK_TRUE || tk==TK_FALSE);
 }
 
 bool MontNode::tryParseValue(MontLexer& lexer) {
@@ -282,7 +283,7 @@ bool MontNode::tryParseExpression(MontLexer& lexer) {
 
 bool MontNode::isTypeToken(Token& token){
     TokenKind tk = token.tokenKind;
-    return (tk==TK_CHAR || tk==TK_INT);
+    return (tk==TK_CHAR || tk==TK_INT || tk==TK_BOOL);
 }
 
 bool MontNode::tryParseType(MontLexer& lexer) {
@@ -484,8 +485,11 @@ bool MontNode::tryParseStatement(MontLexer& lexer) {
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_STATEMENT;
     if (peek.tokenKind == TK_RETURN) {
         ptr->tryParse(lexer, TK_RETURN); ptr->expansion = NE_STATEMENT_RETURN;
-        if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
-            PARSEFAIL("Statement: Illegal return statement.");
+        peek = lexer.peek();
+        if (peek.tokenKind != TK_SEMICOLON) {
+            if (!ptr->tryParseExpression(lexer) || !ptr->tryParse(lexer, TK_SEMICOLON)) 
+                PARSEFAIL("Statement: Illegal return statement.");
+        } else ptr->tryParse(lexer, TK_SEMICOLON);
         if (DEBUG) cout << "ok parsed return statement" << endl;
         addChildren(ptr); return true;
     } else if (peek.tokenKind == TK_SEMICOLON) {
@@ -736,6 +740,15 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_UNARY_POSTFIX: out << "postfix"; break;
         case NE_WHILE_DO: out << "do"; break;
         case NE_WHILE_STANDARD: out << "standard"; break;
+    }
+    if (MontParser::outputType) {
+        out << " : ";
+        switch (datatype) {
+            case DT_BOOL: out << "bool"; break;
+            case DT_CHAR: out << "char"; break;
+            case DT_INT: out << "int"; break;
+            case DT_VOID: out << "void"; break;
+        }
     }
     //out << " {" << endl;
     out << endl;

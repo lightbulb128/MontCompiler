@@ -95,8 +95,10 @@ enum MontNodeExpansion {
 };
 
 enum MontDatatype {
+    DT_VOID,
     DT_INT,
-    DT_VOID
+    DT_CHAR,
+    DT_BOOL
 };
 
 class MontNode {
@@ -189,6 +191,7 @@ private:
     static MontLog logger; 
     MontNodePtr program;
 public:
+    static bool outputType; 
     MontParser();
     bool parse(MontLexer& lexer);
     friend std::ostream& operator << (std::ostream& stream, MontParser& parser);

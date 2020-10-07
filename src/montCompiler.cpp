@@ -102,10 +102,38 @@ int onlyConceiver(const char* filename) {
     return 0;
 }
 
+int onlyType(const char* filename) {
+    MontLexer lexer(true);
+    ifstream fileReader(filename);
+    lexer.setStream(&fileReader);
+    MontParser parser;
+    bool f = parser.parse(lexer);
+    fileReader.close();
+    if (!f) {
+        cerr << "Lexer message: " << endl;
+        cerr << lexer.getErrorInfo();
+        cerr << "Parser message: " << endl;
+        cerr << parser.getErrorInfo();
+        return false;
+    }
+    MontConceiver conceiver; 
+    f = conceiver.conceive(parser);
+    if (!f) {
+        cerr << "Conceiver message: " << endl;
+        cerr << conceiver.getErrorInfo();
+        return false;
+    } else {
+        parser.outputType = true;
+        cout << parser;
+    }
+    return 0;
+}
+
 int main(int argc, const char* argv[]){
     if (argv[1][0] == 'l') return onlyLexer(argv[2]);
     else if (argv[1][0] == 'p') return onlyParser(argv[2]);
     else if (argv[1][0] == 'c') return onlyConceiver(argv[2]);
+    else if (argv[1][0] == 't') return onlyType(argv[2]);
     else if (argv[1][0] == 'a') return compile(argv[2]) ? 0 : -1;
     else return compile(argv[1]) ? 0 : -1;
 }

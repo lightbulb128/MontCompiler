@@ -20,11 +20,11 @@ enum TokenKind {
     // identifier
     TK_IDENTIFIER,
     // values
-    TK_INT_VALUE, TK_CHAR_VALUE,
+    TK_INT_VALUE, TK_CHAR_VALUE, 
     // keywords
     TK_RETURN, TK_INT, TK_CHAR, TK_IF, TK_ELSE, 
     TK_FOR, TK_WHILE, TK_DO, TK_CONTINUE, TK_BREAK,
-    TK_VOID, 
+    TK_VOID, TK_BOOL, TK_TRUE, TK_FALSE,
     // symbols
     TK_LPAREN, TK_RPAREN, TK_LBRACE, TK_RBRACE, TK_SEMICOLON, 
     TK_COMMA, 

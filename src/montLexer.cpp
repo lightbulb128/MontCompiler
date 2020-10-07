@@ -69,6 +69,9 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_CONTINUE: stream << "Continue"; break;
         case TK_BREAK: stream << "Break"; break;
         case TK_VOID: stream << "Void"; break;
+        case TK_TRUE: stream << "True"; break;
+        case TK_FALSE: stream << "False"; break;
+        case TK_BOOL: stream << "Bool"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -388,15 +391,18 @@ void MontLexer::addKeyword(const char* keyword, TokenKind tk) {
 
 void MontLexer::addDefaultKeywords(){
     // please add keywords by alphabetical order
+    addKeyword("bool", TK_BOOL);
     addKeyword("break", TK_BREAK);
     addKeyword("char", TK_CHAR);
     addKeyword("continue", TK_CONTINUE);
     addKeyword("do", TK_DO);
     addKeyword("else", TK_ELSE);
+    addKeyword("false", TK_FALSE);
     addKeyword("for", TK_FOR);
     addKeyword("if", TK_IF);
     addKeyword("int", TK_INT);
     addKeyword("return", TK_RETURN);
+    addKeyword("true", TK_TRUE);
     addKeyword("void", TK_VOID);
     addKeyword("while", TK_WHILE);
 }
