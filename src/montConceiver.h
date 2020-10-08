@@ -54,22 +54,22 @@ enum IntermediateType {
 struct MontVariable {
     string name;
     int location;
-    MontDatatype type;
-    MontVariable(string n, int loc, MontDatatype type) : name(n), location(loc), type(type) {}
+    MontType type;
+    MontVariable(string n, int loc, MontType type) : name(n), location(loc), type(type) {}
     friend std::ostream& operator <<(std::ostream& out, MontVariable& variable);
 };
 
 struct MontFunction {
-    vector<MontDatatype> para;
+    vector<MontType> para;
     string name;
-    MontDatatype ret;
+    MontType ret;
     bool declared;
     bool defined; 
-    MontFunction(string name, MontDatatype ret) : name(name), ret(ret) {
-        para = vector<MontDatatype>();
+    MontFunction(string name, MontType ret) : name(name), ret(ret) {
+        para = vector<MontType>();
         declared = true; defined = false;
     }
-    void addPara(MontDatatype p) {para.push_back(p);}
+    void addPara(MontType p) {para.push_back(p);}
     bool checkConsistency(MontFunction& f){
         if (f.para.size() != para.size()) return false;
         int size = f.para.size();
@@ -84,7 +84,7 @@ struct MontStackFrame {
     vector<MontVariable> identifiers;
     bool blocking;
     MontStackFrame(bool blocking=false): blocking(blocking) {identifiers = vector<MontVariable>();}
-    void push(string name, int loc, MontDatatype type){identifiers.push_back(MontVariable(name, loc, type));}
+    void push(string name, int loc, MontType type){identifiers.push_back(MontVariable(name, loc, type));}
     friend std::ostream& operator <<(std::ostream& out, MontStackFrame& frame);
 };
 
@@ -113,7 +113,8 @@ private:
     friend class MontAssembler;
     static MontLog logger;
     static bool appendErrorInfo(string str, int row, int column) {
-        logger.log("(" + to_string(row) + ":" + to_string(column) + ") " + str);
+        string rc = (row<0) ? "" : ("(" + to_string(row) + ":" + to_string(column) + ") ");
+        logger.log(rc + str);
         return false;
     }
     static bool appendErrorInfo(string str, MontNode* node) {
@@ -130,31 +131,26 @@ private:
     int labelCounter; // 指示加入的label的名称。
     stack<int> loops;
     int currentFunction;
-    void pushParameter(string name, MontDatatype type, int index);
-    void pushVariable(string name, MontDatatype type);
+    void pushParameter(string name, MontType type, int index);
+    void pushVariable(string name, MontType type);
     void pushFrame(bool blocking);
     void popFrame();
     MontFunction& getCurrentFunction(){return functions[currentFunction];}
-    bool getVariable(string name, MontDatatype* type); // 未查询到结果时返回false, 否则返回true，并产生一个frameaddr或globaddr
+    bool getVariable(string name, MontType* type); // 未查询到结果时返回false, 否则返回true，并产生一个frameaddr或globaddr
     int checkRedeclaration(string name); // 仅查询本块内，即本frame中的
     int getFunction(string name);
     bool checkGlobal(string name, bool checkfunction);
-    void pushData(string name, MontDatatype type, int value);
-    void pushBSS(string name, MontDatatype type);
-    MontDatatype getType(Token token);
-    MontDatatype getTypeFromValue(Token token);
-    static void setNodeType(MontNodePtr node, MontDatatype type) {node->datatype = type;}
+    void pushData(string name, MontType type, int value);
+    void pushBSS(string name, MontType type);
+    MontType getType(MontNodePtr node);
+    MontType getTypeFromValue(Token token);
+    static void setNodeType(MontNodePtr node, MontType type) {node->datatype = type;}
     static void setNodeTypeFromChild(MontNodePtr node, int id) {node->datatype = node->children[id]->datatype;}
-    static bool isInt(MontNodePtr ptr){return ptr->datatype == DT_INT;} 
-    static bool isChar(MontNodePtr ptr){return ptr->datatype == DT_CHAR;} 
-    static bool isBool(MontNodePtr ptr){return ptr->datatype == DT_BOOL;} 
-    static bool isVoid(MontNodePtr ptr){return ptr->datatype == DT_VOID;} 
-    static void setInt(MontNodePtr ptr){ptr->datatype = DT_INT;}
-    static void setChar(MontNodePtr ptr){ptr->datatype = DT_CHAR;}
-    static void setBool(MontNodePtr ptr){ptr->datatype = DT_BOOL;}
-    static void setVoid(MontNodePtr ptr){ptr->datatype = DT_VOID;}
-    static int getValue(MontNodePtr ptr);
-    bool parseType(MontDatatype dest, MontDatatype src);
+    static bool isVoid(MontNodePtr ptr){return ptr->datatype.isVoid();} 
+    static bool isPointer(MontNodePtr ptr){return ptr->datatype.isPointer();}
+    static bool isInt(MontNodePtr ptr){return ptr->datatype.isInt();}
+    static int getValue(MontNodePtr ptr, MontType* type);
+    bool parseType(MontType dest, MontType src);
     void pushLoop(int id){loops.push(id);}
     int getCurrentLoop(){return (loops.size()>0) ? loops.top() : -1;}
     void popLoop(){loops.pop();}
@@ -162,9 +158,9 @@ public:
     static string getErrorInfo(){return logger.get();}
     void add(MontIntermediate m){irs.push_back(m);}
     MontConceiver();
-    bool visit(MontNodePtr node);
-    bool visitChildren(MontNodePtr node);
-    bool visitChild(MontNodePtr node, int id){return visit(node->children[id]);}
+    bool visit(MontNodePtr node, bool asLvalue);
+    bool visitChildren(MontNodePtr node, bool asLvalue);
+    bool visitChild(MontNodePtr node, int id, bool asLvalue){return visit(node->children[id], asLvalue);}
     static Token getTokenChild(MontNodePtr node, int id){
         MontTokenNode* ptr = (MontTokenNode*) node->children[id];
         return ptr->getToken();
@@ -180,7 +176,7 @@ public:
         bss = vector<MontVariable>();
         dataValues = vector<int>();
         currentFunction = -1;
-        return visit(p.program);
+        return visit(p.program, false);
     }
     friend std::ostream& operator <<(std::ostream& stream, MontConceiver& c);
 };

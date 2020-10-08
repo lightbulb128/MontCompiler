@@ -23,11 +23,12 @@ if          :   If LP expression RP statement                       IF_SIMPLE
             :   If LP expression RP statement Else statement        IF_ELSE
 declaration :   type Identifier                                     DECLARATION_SIMPLE
             |   type Identifier Assign expression                   DECLARATION_INIT
-type        :   Integer | Char | Bool
+type        :   Integer | Char | Bool                               TYPE_BASIC
+            |   type Asterisk                                       TYPE_POINTER
 exprlist    :   (expression (, expression)*)?
 expression  :   assignment
 assignment  :   conditional                                         ASSIGNMENT_VALUE
-            |   Identifier Assign expression                        ASSIGNMENT_ASSIGN
+            |   unary Assign expression                             ASSIGNMENT_ASSIGN
 conditional :   logical_or                                          CONDITIONAL_LEAF
             |   logical_or Question expression Colon conditional    CONDITIONAL_INNER
 logical_or  :   logical_and                                         LOR_LEAF
@@ -43,7 +44,8 @@ additive    :   multiplicative                                      ADDITIVE_LEA
 multiplica  :   unary                                               MULTI_LEAF
             |   multiplicative (Asterisk|Percent|LSlash) uanry      MULTI_INNER
 unary       :   postfix                                             UNARY_POSTFIX
-            |   (Exclamation|Tilde|Minus) unary                     UNARY_OPERATOR
+            |   (Exclamation|Tilde|Minus|Asterisk|And) unary        UNARY_OPERATOR
+            |   LParen type RParen unary                            UNARY_CAST
 postfix     :   primary                                             POSTFIX_PRIMARY
             |   Identifier LParen exprlist RParen                   POSTFIX_CALL
 primary     :   value                                               PRIMARY_VALUE

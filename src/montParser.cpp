@@ -87,7 +87,9 @@ bool MontNode::tryParseEmpty(MontLexer& lexer){
 bool MontNode::isUnaryOperatorToken(Token& t){
     return (t.tokenKind == TK_EXCLAMATION ||
         t.tokenKind == TK_TILDE ||
-        t.tokenKind == TK_MINUS);
+        t.tokenKind == TK_MINUS ||
+        t.tokenKind == TK_AND ||
+        t.tokenKind == TK_ASTERISK);
 }
 
 bool MontNode::isAdditiveOperatorToken(Token& t){
@@ -135,9 +137,17 @@ bool MontNode::tryParseUnary(MontLexer& lexer) {
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_UNARY;
     Token token = lexer.peek();
     if (!isUnaryOperatorToken(token)) {
-        ptr->expansion = NE_UNARY_POSTFIX;
-        if (!ptr->tryParsePostfix(lexer)) 
-            PARSEFAIL("Unary: Expect postfix syntax.");
+        token = lexer.nextToken(); Token p2 = lexer.nextToken(); lexer.putback(p2); lexer.putback(token);
+        if (token.tokenKind == TK_LPAREN && isTypeToken(p2)) {
+            ptr->expansion = NE_UNARY_CAST;
+            if (!ptr->tryParse(lexer, TK_LPAREN) || !ptr->tryParseType(lexer)
+                || !ptr->tryParse(lexer, TK_RPAREN) || !ptr->tryParseUnary(lexer))
+                PARSEFAIL("Unary: Expect type cast unary.");
+        } else {
+            ptr->expansion = NE_UNARY_POSTFIX;
+            if (!ptr->tryParsePostfix(lexer)) 
+                PARSEFAIL("Unary: Expect postfix syntax.");
+        }
     } else {
         ptr->expansion = NE_UNARY_OPERATION;
         if (!ptr->tryParse(lexer, token.tokenKind) || !ptr->tryParseUnary(lexer)) 
@@ -288,10 +298,19 @@ bool MontNode::isTypeToken(Token& token){
 
 bool MontNode::tryParseType(MontLexer& lexer) {
     if (DEBUG) cout << "try parse type " << lexer.peek() << endl;
-    Mnp ptr = new MontNode(lexer); ptr->kind = NK_TYPE;
+    Mnp ptr = new MontNode(lexer); ptr->kind = NK_TYPE; ptr->expansion = NE_TYPE_BASIC;
     Token token = lexer.peek();
     if (isTypeToken(token)) ptr->tryParse(lexer, token.tokenKind);
     else PARSEFAIL("Type: Expect type name.");
+    token = lexer.peek();
+    while (token.tokenKind == TK_ASTERISK) {
+        Mnp newptr = new MontNode(); newptr->kind = NK_TYPE;
+        newptr->expansion = NE_TYPE_POINTER;
+        newptr->copyRC(*ptr);
+        newptr->addChildren(ptr); ptr = newptr;
+        ptr->tryParse(lexer, TK_ASTERISK);
+        token = lexer.peek();
+    }
     if (DEBUG) cout << "ok parsed type" << endl;
     addChildren(ptr); return true;
 }
@@ -320,11 +339,10 @@ bool MontNode::tryParseAssignment(MontLexer& lexer) {
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_ASSIGNMENT;
     bool successful = false;
     tryStart();
-    if (peek.tokenKind == TK_IDENTIFIER) { // Identifier Assign expression
-        if (!ptr->tryParse(lexer, TK_IDENTIFIER) || !ptr->tryParse(lexer, TK_ASSIGN) || !ptr->tryParseExpression(lexer)) 
-            ptr->putback(lexer);
-        else successful = true, ptr->expansion = NE_ASSIGNMENT_ASSIGN;
-    }
+    // unary Assign expression
+    if (!ptr->tryParseUnary(lexer) || !ptr->tryParse(lexer, TK_ASSIGN) || !ptr->tryParseExpression(lexer)) 
+        ptr->putback(lexer);
+    else successful = true, ptr->expansion = NE_ASSIGNMENT_ASSIGN;
     if (!successful) { // conditional
         successful = ptr->tryParseConditional(lexer), ptr->expansion = NE_ASSIGNMENT_VALUE;
         if (!successful) ptr->putback(lexer);
@@ -642,9 +660,16 @@ bool MontNode::tryParseProgram(MontLexer& lexer) {
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_PROGRAM;
     Token peek = lexer.peek();
     while (peek.tokenKind != TK_EOF) {
-        peek = lexer.nextToken();
+        Mnp typeptr = new MontNode(lexer); 
+        if (!typeptr->tryParseType(lexer)) {
+            typeptr->putback(lexer);
+            appendErrorInfo("Program: Expect type syntax.", typeptr->row, typeptr->column);
+            delete typeptr;
+            return false;
+        }
         Token p2 = lexer.nextToken();
-        Token p3 = lexer.peek(); lexer.putback(p2); lexer.putback(peek);
+        Token p3 = lexer.peek(); lexer.putback(p2); 
+        typeptr->putback(lexer);
         if (p3.tokenKind == TK_LPAREN) {
             if (!ptr->tryParseFunction(lexer)) 
                 PARSEFAIL("Program: Expect function declaration.");
@@ -761,19 +786,17 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_STATEMENT_CONTINUE: out << "continue"; break;
         case NE_STATEMENT_FOR: out << "for"; break;
         case NE_STATEMENT_WHILE: out << "while"; break;
+        case NE_TYPE_BASIC: out << "basic"; break;
+        case NE_TYPE_POINTER: out << "pointer"; break;
         case NE_UNARY_OPERATION: out << "operation"; break;
         case NE_UNARY_POSTFIX: out << "postfix"; break;
+        case NE_UNARY_CAST: out << "cast"; break;
         case NE_WHILE_DO: out << "do"; break;
         case NE_WHILE_STANDARD: out << "standard"; break;
     }
     if (MontParser::outputType) {
         out << " : ";
-        switch (datatype) {
-            case DT_BOOL: out << "bool"; break;
-            case DT_CHAR: out << "char"; break;
-            case DT_INT: out << "int"; break;
-            case DT_VOID: out << "void"; break;
-        }
+        out << datatype;
     }
     //out << " {" << endl;
     out << endl;
@@ -784,4 +807,19 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
     if (cnt>0)
         children[cnt-1]->output(newtab, true, out);
     //out << sp << "}" << endl;
+}
+
+ostream& operator <<(ostream& out, MontType& type) {
+    if (type.basic == DT_POINTER) {
+        out << "ptr[" << *type.pointer << "]"; return out;
+    } else {
+        switch (type.basic) {
+            case DT_BOOL: out << "bool"; return out; 
+            case DT_INT: out << "int"; return out;
+            case DT_CHAR: out << "char"; return out;
+            case DT_VOID: out << "void"; return out;
+            default: out << "errortype"; return out;
+        }
+    }
+    return out;
 }

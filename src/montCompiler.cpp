@@ -7,7 +7,7 @@
 #include <list>
 using namespace std;
 
-bool compile(const char* filename){
+bool compile(const char* filename){ 
     MontLexer lexer(true);
     ifstream fileReader(filename);
     lexer.setStream(&fileReader);
@@ -30,7 +30,7 @@ bool compile(const char* filename){
     }
     MontAssembler assembler;
     assembler.setStream(&cout);
-    assembler.assemble(conceiver);
+    assembler.assemble(conceiver); 
     return true;
 }
 
@@ -76,7 +76,7 @@ int onlyParser(const char* filename){
     return 0;
 }
 
-int onlyConceiver(const char* filename) {
+int onlyConceiver(const char* filename) { 
     MontLexer lexer(true);
     ifstream fileReader(filename);
     lexer.setStream(&fileReader);
@@ -98,11 +98,11 @@ int onlyConceiver(const char* filename) {
         return false;
     } else {
         cout << conceiver;
-    }
+    } 
     return 0;
 }
 
-int onlyType(const char* filename) {
+int onlyType(const char* filename) { 
     MontLexer lexer(true);
     ifstream fileReader(filename);
     lexer.setStream(&fileReader);
@@ -125,7 +125,7 @@ int onlyType(const char* filename) {
     } else {
         parser.outputType = true;
         cout << parser;
-    }
+    } 
     return 0;
 }
 
