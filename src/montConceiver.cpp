@@ -8,7 +8,7 @@
 #define IRSTR(c, s) (MontIntermediate::strcode(c, (s)))
 #define IRCOM(c, v, s) (MontIntermediate::comcode(c, v, s))
 #define NRC node->row, node->column
-#define CRC "(" << node->row << ":" << node->column << ")"
+#define CRC node->kind << "-" << node->expansion << " (" << node->row << ":" << node->column << ")"
 #define LW2 string("lw t1, 4(sp)\nlw t2, 0(sp)\n")
 #define LW1 string("lw t1, 0(sp)\n")
 #define SW1 string("sw t1, 0(sp)\n")
@@ -20,7 +20,7 @@ MontLog MontConceiver::logger = MontLog();
 
 typedef MontNodePtr Mnp;
 
-const bool DEBUG = true;
+const bool DEBUG = false;
 
 using std::ostream;
 using std::cerr;
@@ -187,13 +187,16 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 Mnp a = node->children[0], b = node->children[2];
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Additive: Addition with void.", NRC);
-                if (isPointer(a) && isPointer(b))
+                /*if (isPointer(a) && isPointer(b))
                     return appendErrorInfo("Additive: Addition of two pointers.", NRC);
                 if (isPointer(a) && isInt(b))
                     node->datatype = a->datatype;
                 else if (isPointer(b) && isInt(a))
                     node->datatype = b->datatype;
-                else node->datatype = MontType(DT_INT); 
+                else node->datatype = MontType(DT_INT); */
+                if (isPointer(a) || isPointer(b))
+                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
+                node->datatype = MontType(DT_INT); 
                 node->setLvalue(false);
                 return true;
             }
@@ -205,19 +208,21 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             if (DEBUG) std::cout << "conceiving assignment " << CRC << endl; 
             if (node->expansion == NE_ASSIGNMENT_VALUE) 
                 DETERMINECHILD(0)
-            else if (node->expansion == NE_ASSIGNMENT_ASSIGN) { // Identifier Assign expression
-                Token name = getTokenChild(node, 0);
+            else if (node->expansion == NE_ASSIGNMENT_ASSIGN) { // unary Assign expression
                 MontType type;
                 flag = visitChild(node, 2, false);
                 if (isVoid(node->children[2])) 
                     return appendErrorInfo("Assignent: Expression is void.", NRC);
                 //cerr << type << node->children[2]->datatype << endl;
                 if (!flag) return false;
-                flag = getVariable(name.identifier, &type);
-                if (!flag) 
-                    return appendErrorInfo("Assignment: Undefined identifier: " + name.identifier + ".", NRC);
+                if (!visitChild(node, 0, true)) return false;
+                if (!node->children[0]->isLvalue()) 
+                    return appendErrorInfo("Assignment: Assign to rvalue.", NRC);
+                type = node->children[0]->datatype;
+                if (type != node->children[2]->datatype)
+                    return appendErrorInfo("Assignment: Value type does not match.", NRC);
                 if (!parseType(type, node->children[2]->datatype))
-                    return appendErrorInfo("Assignment: Value type does not match.",NRC);
+                    return appendErrorInfo("Assignment: Failed to cast implicitly.",NRC);
                 setNodeType(node, type); node->setLvalue(false);
                 add(IRSIM(IR_STORE));
                 return true;
@@ -245,6 +250,11 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             else if (node->expansion == NE_CONDITIONAL_INNER) { // logical_or Question expression Colon conditional
                 int labelId = labelCounter ++;
                 if (!visitChild(node, 0, false)) return false;
+                Mnp cond = node->children[0];
+                if (isVoid(cond))
+                    return appendErrorInfo("Conditional: Void condition.", NRC);
+                if (isPointer(cond))
+                    return appendErrorInfo("Conditional: Pointer condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("CONDITIONAL_FALSE")));
                 if (!visitChild(node, 2, false)) return false;
                 add(IRSTR(IR_BR, getLabel("CONDITIONAL_END")));
@@ -253,15 +263,15 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 add(IRSTR(IR_LABEL, getLabel("CONDITIONAL_END")));
                 Mnp a = node->children[2], b = node->children[4];
                 if (isVoid(a) || isVoid(b)) 
-                    return appendErrorInfo("Conditional: Conditional with void.", NRC);
+                    return appendErrorInfo("Conditional: Selection with void.", NRC);
                 if (a->datatype != b->datatype) 
-                    return appendErrorInfo("Conditional: Seletive type inconsistent.", NRC);
+                    return appendErrorInfo("Conditional: Selection type inconsistent.", NRC);
                 setNodeTypeFromChild(node, 2); node->setLvalue(false);
                 return true;
             } else 
                 return appendErrorInfo("Conditional: Undefined conditional syntax.", NRC);
         }
-        case NK_DECLARATION: { // type Identifier [Assign Expression]
+        case NK_DECLARATION: { // type Identifier [Assign expression]
             if (DEBUG) std::cout << "conceiving declaration " << CRC << endl; 
             MontType type = getType(node->children[0]);
             Token name = getTokenChild(node, 1);
@@ -271,8 +281,10 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             pushVariable(name.identifier, type);
             if (node->expansion == NE_DECLARATION_INIT) {
                 flag = visitChild(node, 3, false);
-                if (!parseType(type, node->children[3]->datatype))
+                if (type != node->children[3]->datatype)
                     return appendErrorInfo("Declaration: Value type does not match.",NRC);
+                if (!parseType(type, node->children[3]->datatype))
+                    return appendErrorInfo("Declaration: Failed to cast implicitly.",NRC);
                 if (!flag) return false;
             } else if (node->expansion == NE_DECLARATION_SIMPLE) 
                 add(IRINT(IR_PUSH, 0));
@@ -280,6 +292,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             getVariable(name.identifier, nullptr); 
             add(IRSIM(IR_STORE));
             add(IRSIM(IR_POP));
+            //if (DEBUG) std::cout << "ok conceived declaration" << endl;
             return true;
         }
         case NK_EMPTY: {
@@ -299,6 +312,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     add(IRSIM(IR_NEQ));
                 else return appendErrorInfo("Equality: Expect operator ==, != token.", node->row, node->column);
                 Mnp a = node->children[0], b = node->children[2];
+                if (a->datatype != b->datatype)
+                    return appendErrorInfo("Equality: Types do not match.", NRC);
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Equality: Equality with void.", NRC);
                 else node->datatype = MontType(DT_BOOL); 
@@ -329,8 +344,14 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 add(IRSIM(IR_POP));
             add(IRSTR(IR_LABEL, getLabel("LOOP_BEGIN")));
             if (!visitChild(node, 4, false)) return false;
-            if (node->children[4]->kind != NK_EMPTY)
+            if (node->children[4]->kind != NK_EMPTY) {
+                Mnp cond = node->children[4];
+                if (isVoid(cond))
+                    return appendErrorInfo("For: Void condition.", NRC);
+                if (isPointer(cond))
+                    return appendErrorInfo("For: Pointer condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("LOOP_BREAK")));
+            }
             pushFrame(false);
             if (!visitChild(node, 8, false)) return false;
             add(IRSTR(IR_LABEL, getLabel("LOOP_CONTINUE")));
@@ -434,12 +455,22 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             int labelId = labelCounter ++;
             if (node->expansion == NE_IF_SIMPLE) { // If LParen expression RParen statement
                 if (!visitChild(node, 2, false)) return false;
+                Mnp cond = node->children[2];
+                if (isVoid(cond))
+                    return appendErrorInfo("If: Void condition.", NRC);
+                if (isPointer(cond))
+                    return appendErrorInfo("If: Pointer condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("IF_END")));
                 if (!visitChild(node, 4, false)) return false;
                 add(IRSTR(IR_LABEL, getLabel("IF_END")));
                 return true;
             } else if (node->expansion == NE_IF_ELSE) { // If LParen expression RParen statement Else statement
                 if (!visitChild(node, 2, false)) return false;
+                Mnp cond = node->children[2];
+                if (isVoid(cond))
+                    return appendErrorInfo("If: Void condition.", NRC);
+                if (isPointer(cond))
+                    return appendErrorInfo("If: Pointer condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("IF_ELSE")));
                 if (!visitChild(node, 4, false)) return false;
                 add(IRSTR(IR_BR, getLabel("IF_END")));
@@ -463,6 +494,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 Mnp a = node->children[0], b = node->children[2];
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Logical and: Operation with void.", NRC);
+                if (isPointer(a) || isPointer(b))
+                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
                 else node->datatype = MontType(DT_BOOL);
                 node->setLvalue(false);
                 return true;
@@ -484,6 +517,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 Mnp a = node->children[0], b = node->children[2];
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Logical or: Operation with void.", NRC);
+                if (isPointer(a) || isPointer(b))
+                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
                 else node->datatype = MontType(DT_BOOL);
                 node->setLvalue(false);
                 return true;
@@ -509,6 +544,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 Mnp a = node->children[0], b = node->children[2];
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Multiplicative: Multiplicative with void.", NRC);
+                if (isPointer(a) || isPointer(b))
+                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
                 else node->datatype = MontType(DT_INT);
                 node->setLvalue(false);
                 return true;
@@ -537,8 +574,10 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     return appendErrorInfo("Postfix: Function parameter count does not match.", NRC);
                 for (int i=exprcount-1;i>=0;i--) {
                     if (!visitChild(exprlist, 2*i, false)) return false;
-                    if (!parseType(func.para[i], exprlist->children[2*i]->datatype))
+                    if (func.para[i] != exprlist->children[2*i]->datatype)
                         return appendErrorInfo("Postfix: Argument type does not match.",NRC);
+                    if (!parseType(func.para[i], exprlist->children[2*i]->datatype))
+                        return appendErrorInfo("Postfix: Failed to cast implicitly.", NRC);
                 }
                 if (func.ret == DT_VOID) 
                     add(IRCOM(IR_CALLV, exprcount, name));
@@ -561,8 +600,14 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 flag = getVariable(name.identifier, &type); 
                 if (!flag) return appendErrorInfo("Primary: Undefined identifier: " + name.identifier + ".", NRC);
                 setNodeType(node, type);
-                if (!asLvalue) 
+                if (!asLvalue) {
                     add(IRSIM(IR_LOAD));
+                    node->setLvalue(false);
+                } else {
+                    node->setLvalue(true);
+                }
+                //if (DEBUG) std::cout << "ok conceived primary" << endl;
+                return true;
             } else 
                 return appendErrorInfo("Primary: Undefined primary syntax.", node->row, node->column);
             break;
@@ -604,6 +649,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 Mnp a = node->children[0], b = node->children[2];
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Relational and: Relational with void.", NRC);
+                if (isPointer(a) || isPointer(b))
+                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
                 else node->datatype = MontType(DT_BOOL);
                 node->setLvalue(false);
                 return true;
@@ -639,6 +686,10 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                         flag = visitChild(node, 1, false);
                         if (isVoid(node->children[1])) 
                             return appendErrorInfo("Statement: Returning void value.", NRC);
+                        if (func.ret != node->children[1]->datatype)
+                            return appendErrorInfo("Statement: Returning wrong type.", NRC);
+                        if (!parseType(func.ret, node->children[1]->datatype))
+                            return appendErrorInfo("Statement: Failed to cast implicitly the return value", NRC);
                         add(IRSIM(IR_RET));
                     } else {
                         add(IRSIM(IR_RETV));
@@ -705,6 +756,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     if (op.tokenKind == TK_MINUS) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
+                        if (isPointer(node->children[1])) return appendErrorInfo("Unary: Unary with pointer.", NRC);
                         add(IRSIM(IR_NEG)); 
                         if (node->children[0]->datatype.isBool()) node->datatype = MontType(DT_INT);
                         else setNodeTypeFromChild(node, 1); 
@@ -712,12 +764,14 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     } else if (op.tokenKind == TK_EXCLAMATION) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
+                        if (isPointer(node->children[1])) return appendErrorInfo("Unary: Unary with pointer.", NRC);
                         add(IRSIM(IR_LNOT));
                         node->datatype = MontType(DT_BOOL);
                         node->setLvalue(false); return true;
                     } else if (op.tokenKind == TK_TILDE) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
+                        if (isPointer(node->children[1])) return appendErrorInfo("Unary: Unary with pointer.", NRC);
                         add(IRSIM(IR_NOT));
                         if (node->children[0]->datatype.isBool()) node->datatype = MontType(DT_INT);
                         else setNodeTypeFromChild(node, 1);
@@ -728,7 +782,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                         if (!node->children[1]->isLvalue()) 
                             return appendErrorInfo("Unary: And symbol followed by rvalue.", NRC);
                         // 当visitchild之后必定在栈顶就是一个地址，因而无需做任何操作。
-                        node->datatype = new MontType(&(node->children[1]->datatype));
+                        node->datatype = MontType(new MontType(node->children[1]->datatype));
                         node->setLvalue(false);
                         return true;
                     } else if (op.tokenKind == TK_ASTERISK) {
@@ -736,7 +790,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
                         if (!node->children[1]->datatype.isPointer())
                             return appendErrorInfo("Unary: Asterisk symbol followed by non-pointer.", NRC);
-                        add(IRSIM(IR_LOAD));
+                        if (!asLvalue) 
+                            add(IRSIM(IR_LOAD));
                         node->datatype = *(node->children[1]->datatype.pointer);
                         node->setLvalue(true);
                         return true;
@@ -752,6 +807,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     if (!visitChild(node, 3, false)) return false;
                     MontType type = getType(node->children[1]);
                     if (!parseType(type, node->children[3]->datatype)) return false;
+                    node->datatype = type;
                     return true;
                     break;
                 }
@@ -776,7 +832,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
         case NK_WHILE: { // While ( expr ) statement | Do statement While ( expr ) ; 
             if (DEBUG) std::cout << "conceiving while " << CRC << endl; 
             if (node->expansion != NE_WHILE_STANDARD && node->expansion != NE_WHILE_DO)
-                return appendErrorInfo("For: Undefined while syntax.", NRC); 
+                return appendErrorInfo("While: Undefined while syntax.", NRC); 
             int labelId = labelCounter ++; pushLoop(labelId);
             pushFrame(false);
             bool doloop = node->expansion == NE_WHILE_DO;
@@ -784,6 +840,11 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (!visitChild(node, 1, false)) return false;
             add(IRSTR(IR_LABEL, getLabel("LOOP_BEGIN")));
             if (!visitChild(node, doloop ? 4 : 2, false)) return false;
+            Mnp cond = node->children[doloop ? 4 : 2];
+            if (isVoid(cond))
+                return appendErrorInfo("While: Void condition.", NRC);
+            if (isPointer(cond))
+                return appendErrorInfo("While: Pointer condition.", NRC);
             add(IRSTR(IR_BEQZ, getLabel("LOOP_BREAK")));
             pushFrame(false);
             if (!visitChild(node, doloop ? 1 : 4, false)) return false;
@@ -930,6 +991,7 @@ ostream& operator <<(ostream& out, MontVariable& variable) {
 }
 
 bool MontConceiver::parseType(MontType dest, MontType src) {
+    if (DEBUG) std::cout << "parse type " << src << " to " << dest << endl;
     if (src.isVoid() || dest.isVoid()) return appendErrorInfo("Cast: Casting void.", -1, -1); // 禁止出现有void参与转换
     if (dest.isBool() && !src.isBool()) add(IRSIM(IR_BOOL)); // 将整数和字符转换为布尔
     return true;
@@ -973,4 +1035,10 @@ int MontConceiver::getValue(Mnp ptr, MontType* type) {
             return 0;
     }
     return 0;
+}
+
+bool MontConceiver::visitChild(MontNodePtr node, int id, bool asLvalue){
+    bool f = visit(node->children[id], asLvalue);
+    if (DEBUG) std::cout << "ok conceived " << node->children[id]->kind << "-" << node->children[id]->expansion << endl;
+    return f;
 }

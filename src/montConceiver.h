@@ -71,6 +71,7 @@ struct MontFunction {
     }
     void addPara(MontType p) {para.push_back(p);}
     bool checkConsistency(MontFunction& f){
+        if (ret != f.ret) return false;
         if (f.para.size() != para.size()) return false;
         int size = f.para.size();
         for (int i=0;i<size;i++) 
@@ -160,7 +161,7 @@ public:
     MontConceiver();
     bool visit(MontNodePtr node, bool asLvalue);
     bool visitChildren(MontNodePtr node, bool asLvalue);
-    bool visitChild(MontNodePtr node, int id, bool asLvalue){return visit(node->children[id], asLvalue);}
+    bool visitChild(MontNodePtr node, int id, bool asLvalue);
     static Token getTokenChild(MontNodePtr node, int id){
         MontTokenNode* ptr = (MontTokenNode*) node->children[id];
         return ptr->getToken();

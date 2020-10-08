@@ -660,8 +660,11 @@ bool MontNode::tryParseProgram(MontLexer& lexer) {
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_PROGRAM;
     Token peek = lexer.peek();
     while (peek.tokenKind != TK_EOF) {
-        Mnp typeptr = new MontNode(lexer); 
-        if (!typeptr->tryParseType(lexer)) {
+        Mnp typeptr = new MontNode(lexer);
+        if (peek.tokenKind == TK_VOID) {
+            typeptr->tryParse(lexer, TK_VOID);
+        }
+        else if (!typeptr->tryParseType(lexer)) {
             typeptr->putback(lexer);
             appendErrorInfo("Program: Expect type syntax.", typeptr->row, typeptr->column);
             delete typeptr;
@@ -810,6 +813,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
 }
 
 ostream& operator <<(ostream& out, MontType& type) {
+    if (type.lvalue) out << "LVALUE ";
     if (type.basic == DT_POINTER) {
         out << "ptr[" << *type.pointer << "]"; return out;
     } else {

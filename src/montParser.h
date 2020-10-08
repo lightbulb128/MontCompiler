@@ -48,7 +48,7 @@ enum MontNodeKind {
 };
 
 enum MontNodeExpansion {
-    NE_NONE, 
+    NE_NONE,                  // 0
     NE_STATEMENT_EXPRESSION,
     NE_STATEMENT_RETURN,
     NE_STATEMENT_CODEBLOCK,
@@ -58,7 +58,7 @@ enum MontNodeExpansion {
     NE_STATEMENT_WHILE,
     NE_STATEMENT_BREAK,
     NE_STATEMENT_CONTINUE,
-    NE_UNARY_POSTFIX,
+    NE_UNARY_POSTFIX,        // 10
     NE_UNARY_OPERATION,
     NE_UNARY_CAST,
     NE_PRIMARY_VALUE,
@@ -68,7 +68,7 @@ enum MontNodeExpansion {
     NE_MULTIPLICATIVE_INNER,
     NE_ADDITIVE_LEAF,
     NE_ADDITIVE_INNER,
-    NE_LOR_LEAF,
+    NE_LOR_LEAF,             // 20
     NE_LOR_INNER,
     NE_LAND_LEAF,
     NE_LAND_INNER,
@@ -78,7 +78,7 @@ enum MontNodeExpansion {
     NE_RELATIONAL_INNER,
     NE_DECLARATION_SIMPLE,
     NE_DECLARATION_INIT,
-    NE_ASSIGNMENT_VALUE,
+    NE_ASSIGNMENT_VALUE,      // 30
     NE_ASSIGNMENT_ASSIGN,
     NE_BLOCKITEM_STATEMENT,
     NE_BLOCKITEM_DECLARATION,
@@ -88,7 +88,7 @@ enum MontNodeExpansion {
     NE_CONDITIONAL_INNER,
     NE_FOR_EXPRESSION,
     NE_FOR_DECLARATION,
-    NE_WHILE_STANDARD,
+    NE_WHILE_STANDARD,        // 40
     NE_WHILE_DO,
     NE_FUNCTION_DECLARATION,
     NE_FUNCTION_DEFINITION,
@@ -132,8 +132,8 @@ struct MontType {
     }
     // 不考虑左值与否
     bool operator ==(const MontType& r){
-        if (basic == DT_POINTER) 
-            return (r.basic==DT_POINTER) && (*pointer == *r.pointer);
+        if (basic == DT_POINTER || r.basic == DT_POINTER) 
+            return (basic == DT_POINTER) && (r.basic==DT_POINTER) && (*pointer == *r.pointer);
         if (basic == DT_VOID && r.basic != DT_VOID) return false;
         if (basic != DT_VOID && r.basic == DT_VOID) return false;
         return true;

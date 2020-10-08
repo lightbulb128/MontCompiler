@@ -8,5 +8,6 @@
 /src/testcode.s
 /src/testcode
 /src/testcode.out
+/src/*.log
 .vscode
 /temp
