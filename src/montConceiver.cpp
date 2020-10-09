@@ -60,6 +60,7 @@ string MontIntermediate::toString(){
         case IR_BOOL: return "BOOL";
         case IR_CALL: return "CALL " + str + " " + to_string(num);
         case IR_CALLV: return "CALLV " + str + " " + to_string(num);
+        case IR_SWAP: return "SWAP";
         default: return "IRERROR";
     }
 }
@@ -144,6 +145,9 @@ string MontIntermediate::toAssembly(){
                 _L("jr ra"); 
         case IR_STORE: return LW2 + _L("sw t1, 0(t2)") + BSP;
         case IR_SUB: return LW2 + _L("sub t1, t1, t2")+BSP+SW1;
+        case IR_SWAP: return LW2 +
+                _L("sw t1, 0(sp)") +
+                _L("sw t2, 4(sp)");
         default: return "nop";
     }
 }
@@ -179,24 +183,49 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             else if (node->expansion == NE_ADDITIVE_INNER) {
                 if (!visitChild(node, 0, false) || !visitChild(node, 2, false)) return false;
                 Token op = getTokenChild(node, 1);
-                if (op.tokenKind == TK_PLUS)
-                    add(IRSIM(IR_ADD));
-                else if (op.tokenKind == TK_MINUS)
-                    add(IRSIM(IR_SUB));
-                else return appendErrorInfo("Additive: Expect operator token.", node->row, node->column);
+                if (op.tokenKind != TK_PLUS && op.tokenKind != TK_MINUS)
+                    return appendErrorInfo("Additive: Expect operator token.", node->row, node->column);
                 Mnp a = node->children[0], b = node->children[2];
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Additive: Addition with void.", NRC);
-                /*if (isPointer(a) && isPointer(b))
-                    return appendErrorInfo("Additive: Addition of two pointers.", NRC);
-                if (isPointer(a) && isInt(b))
-                    node->datatype = a->datatype;
-                else if (isPointer(b) && isInt(a))
-                    node->datatype = b->datatype;
-                else node->datatype = MontType(DT_INT); */
-                if (isPointer(a) || isPointer(b))
-                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
-                node->datatype = MontType(DT_INT); 
+                else if (op.tokenKind == TK_PLUS) {
+                    if (isBroadint(a) && isBroadint(b)) {
+                        parseType(MontType(DT_INT), a->datatype);
+                        parseType(MontType(DT_INT), b->datatype);
+                        add(IRSIM(IR_ADD)); node->datatype = MontType(DT_INT);
+                    } else if (isInt(a) && isPointer(b)) { // imm adr
+                        add(IRSIM(IR_SWAP)); // adr imm
+                        add(IRINT(IR_PUSH, 4)); // adr imm 4
+                        add(IRSIM(IR_MUL)); // adr 4imm
+                        add(IRSIM(IR_ADD)); node->datatype = b->datatype;
+                    } else if (isPointer(a) && isInt(b)) { // adr imm
+                        add(IRINT(IR_PUSH, 4)); // adr imm 4
+                        add(IRSIM(IR_MUL)); // adr 4imm
+                        add(IRSIM(IR_ADD)); node->datatype = a->datatype;
+                    } else if (isPointer(a) && isPointer(b)) 
+                        return appendErrorInfo("Additive: Adding two pointers.", NRC);
+                    else 
+                        return appendErrorInfo("Additive: Addition of operand types undefined.", NRC);
+                } else if (op.tokenKind == TK_MINUS) {
+                    if (isBroadint(a) && isBroadint(b)) {
+                        parseType(MontType(DT_INT), a->datatype);
+                        parseType(MontType(DT_INT), b->datatype);
+                        add(IRSIM(IR_SUB)); node->datatype = MontType(DT_INT);
+                    } else if (isInt(a) && isPointer(b)) 
+                        return appendErrorInfo("Additive: Integer minus pointer.", NRC);
+                    else if (isPointer(a) && isInt(b)) { // adr imm
+                        add(IRINT(IR_PUSH, 4)); // adr imm 4
+                        add(IRSIM(IR_MUL)); // adr 4imm
+                        add(IRSIM(IR_SUB)); node->datatype = a->datatype;
+                    } else if (isPointer(a) && isPointer(b)) {
+                        if (a->datatype != b->datatype) 
+                            return appendErrorInfo("Addition: Pointer types of substraction do not match.", NRC);
+                        add(IRSIM(IR_SUB));
+                        add(IRINT(IR_PUSH, 4));
+                        add(IRSIM(IR_DIV));
+                    } else 
+                        return appendErrorInfo("Additive: Substraction of operand types undefined.", NRC);
+                }
                 node->setLvalue(false);
                 return true;
             }
@@ -219,6 +248,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (!node->children[0]->isLvalue()) 
                     return appendErrorInfo("Assignment: Assign to rvalue.", NRC);
                 type = node->children[0]->datatype;
+                if (DEBUG) std::cout << "assignment " << node->children[2]->datatype << " to " << type << endl;
                 if (type != node->children[2]->datatype)
                     return appendErrorInfo("Assignment: Value type does not match.", NRC);
                 if (!parseType(type, node->children[2]->datatype))
@@ -278,17 +308,32 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             int id = checkRedeclaration(name.identifier);
             if (id!=-1) 
                 return appendErrorInfo("Declaration: Variable redeclared: " + name.identifier + ".", NRC);
-            pushVariable(name.identifier, type);
             if (node->expansion == NE_DECLARATION_INIT) {
+                pushVariable(name.identifier, type, node->memorySize);
                 flag = visitChild(node, 3, false);
                 if (type != node->children[3]->datatype)
                     return appendErrorInfo("Declaration: Value type does not match.",NRC);
                 if (!parseType(type, node->children[3]->datatype))
                     return appendErrorInfo("Declaration: Failed to cast implicitly.",NRC);
                 if (!flag) return false;
-            } else if (node->expansion == NE_DECLARATION_SIMPLE) 
+            } else if (node->expansion == NE_DECLARATION_SIMPLE) {
+                pushVariable(name.identifier, type, node->memorySize);
                 add(IRINT(IR_PUSH, 0));
-            else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
+            }
+            else if (node->expansion == NE_DECLARATION_ARRAY) { // 产生数组大小那么多个默认值0
+                // type Identifier LB Value RB LB value RB
+                int dim = (node->children.size()-2)/3;
+                for (int i=dim-1;i>=0;i--) {
+                    int nid = i*3+3; int arraylength;
+                    MontNode::isValueInteger(node->children[nid], &arraylength);
+                    type = MontType(new MontType(type), arraylength);
+                }
+                if (DEBUG) std::cout << "declare array " << type << endl;
+                pushVariable(name.identifier, type, node->memorySize);
+                int cnt = node->memorySize/4;
+                for (int i=0;i<cnt;i++) 
+                    add(IRINT(IR_PUSH, 0));
+            } else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
             getVariable(name.identifier, nullptr); 
             add(IRSIM(IR_STORE));
             add(IRSIM(IR_POP));
@@ -438,14 +483,25 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             MontType type = getType(node->children[0]);
             if (checkGlobal(name, true)) 
                 return appendErrorInfo("Globdecl: Global variable conflicts with a defined variable/function.", NRC);
-            if (node->children.size() == 3) {
-                pushBSS(name, type);
-            } else if (node->children.size() == 5) {
+            if (node->expansion == NE_GLOBDECL_SIMPLE) {
+                pushBSS(name, type, 4);
+            } else if (node->expansion == NE_GLOBDECL_INIT) {
                 MontType vtype;
                 int v = getValue(node->children[3], &vtype);
                 if (vtype!=type)
                     return appendErrorInfo("Globdecl: Init value type does not match.", NRC);
                 pushData(name, type, v);
+            } else if (node->expansion == NE_GLOBDECL_ARRAY) {
+                // type Identifier LB Value RB LB value RB Semicolon
+                int dim = (node->children.size()-3)/3;
+                for (int i=dim-1;i>=0;i--) {
+                    int nid = i*3+3; int arraylength;
+                    MontNode::isValueInteger(node->children[nid], &arraylength);
+                    type = MontType(new MontType(type), arraylength);
+                }
+                if (DEBUG) std::cout << "globdecl array " << type << endl;
+                int cnt = node->memorySize/4;
+                pushBSS(name, type, node->memorySize);
             } else 
                 return appendErrorInfo("Globdecl: Undefined globdecl syntax.", NRC);
             return true;
@@ -585,6 +641,26 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     add(IRCOM(IR_CALL, exprcount, name));
                 setNodeType(node, func.ret); node->setLvalue(false);
                 return true;
+            } else if (node->expansion == NE_POSTFIX_ARRAY) { // postfix LB expr RB
+                if (!visitChild(node, 0, true)) return false;
+                //std::cout << node->children[0]->datatype;
+                if (!visitChild(node, 2, false)) return false;
+                if (!isBroadptr(node->children[0])) 
+                    return appendErrorInfo("Postfix: Indexing on non-broadptr.", NRC);
+                if (!isInt(node->children[2]))
+                    return appendErrorInfo("Postfix: Index not integer.", NRC);
+                if (isPointer(node->children[0])) 
+                    add(IRINT(IR_PUSH, 4));
+                else 
+                    add(IRINT(IR_PUSH, node->children[0]->datatype.pointer->size));
+                setNodeType(node, *(node->children[0]->datatype.pointer));
+                add(IRSIM(IR_MUL));
+                add(IRSIM(IR_ADD));
+                if (!asLvalue) {
+                    add(IRSIM(IR_LOAD));
+                    node->setLvalue(false);
+                } else node->setLvalue(true);
+                return true;
             } else 
                 return appendErrorInfo("Postfix: Undefined postfix syntax.", NRC);
         }
@@ -627,6 +703,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             for (int i=0;i<s-1;i++) {
                 if (!visitChild(node, i, false)) return false;
             }
+            if (DEBUG) std::cout << "program conceived" << endl; 
             return true;
             break;
         }
@@ -756,7 +833,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     if (op.tokenKind == TK_MINUS) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
-                        if (isPointer(node->children[1])) return appendErrorInfo("Unary: Unary with pointer.", NRC);
+                        if (isBroadptr(node->children[1])) return appendErrorInfo("Unary: Unary with broadptr.", NRC);
                         add(IRSIM(IR_NEG)); 
                         if (node->children[0]->datatype.isBool()) node->datatype = MontType(DT_INT);
                         else setNodeTypeFromChild(node, 1); 
@@ -764,14 +841,14 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     } else if (op.tokenKind == TK_EXCLAMATION) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
-                        if (isPointer(node->children[1])) return appendErrorInfo("Unary: Unary with pointer.", NRC);
+                        if (isBroadptr(node->children[1])) return appendErrorInfo("Unary: Unary with broadptr.", NRC);
                         add(IRSIM(IR_LNOT));
                         node->datatype = MontType(DT_BOOL);
                         node->setLvalue(false); return true;
                     } else if (op.tokenKind == TK_TILDE) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
-                        if (isPointer(node->children[1])) return appendErrorInfo("Unary: Unary with pointer.", NRC);
+                        if (isBroadptr(node->children[1])) return appendErrorInfo("Unary: Unary with broadptr.", NRC);
                         add(IRSIM(IR_NOT));
                         if (node->children[0]->datatype.isBool()) node->datatype = MontType(DT_INT);
                         else setNodeTypeFromChild(node, 1);
@@ -779,6 +856,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     } else if (op.tokenKind == TK_AND) {
                         if (!visitChild(node, 1, true)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
+                        if (isArray(node->children[1])) return appendErrorInfo("Unary: Getting address of array.", NRC);
                         if (!node->children[1]->isLvalue()) 
                             return appendErrorInfo("Unary: And symbol followed by rvalue.", NRC);
                         // 当visitchild之后必定在栈顶就是一个地址，因而无需做任何操作。
@@ -788,7 +866,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     } else if (op.tokenKind == TK_ASTERISK) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
-                        if (!node->children[1]->datatype.isPointer())
+                        if (!isBroadptr(node->children[1]))
                             return appendErrorInfo("Unary: Asterisk symbol followed by non-pointer.", NRC);
                         if (!asLvalue) 
                             add(IRSIM(IR_LOAD));
@@ -881,10 +959,10 @@ ostream& operator <<(ostream& out, MontConceiver& con){
     return out;
 }
 
-void MontConceiver::pushVariable(string name, MontType type){
+void MontConceiver::pushVariable(string name, MontType type, int memorySize){
     int size = frames.size();
-    frames[size-1].push(name, variablePointer, type);
-    variablePointer++;
+    frames[size-1].push(name, variablePointer, type, memorySize);
+    variablePointer+=memorySize/4;
 }
 
 void MontConceiver::pushFrame(bool blocking){
@@ -973,7 +1051,7 @@ void MontConceiver::pushParameter(string name, MontType type, int index) {
     // 对于局部变量，其位置loc表示其在栈中位置为 fp - 12 - 4*loc
     // 对于参数，其栈中位置为 fp + 4*index，从而知道其loc应当为-3-index
     int size = frames.size();
-    frames[size-1].push(name, -3-index, type);
+    frames[size-1].push(name, -3-index, type, 4);
 }
 
 ostream& operator <<(ostream& out, MontStackFrame& frame) {
@@ -985,7 +1063,9 @@ ostream& operator <<(ostream& out, MontStackFrame& frame) {
 }
 
 ostream& operator <<(ostream& out, MontVariable& variable) {
-    out << "[" << variable.type;
+    out << "[";
+    if (variable.size!=4) out << variable.size <<": ";
+    out << variable.type;
     out << " " << variable.name << " @ " << variable.location << "]";
     return out;
 }
@@ -1010,12 +1090,12 @@ bool MontConceiver::checkGlobal(string name, bool checkfunction){
 }
 
 void MontConceiver::pushData(string name, MontType type, int value) {
-    data.push_back(MontVariable(name, 0, type));
+    data.push_back(MontVariable(name, 0, type, 4));
     dataValues.push_back(value);
 }
 
-void MontConceiver::pushBSS(string name, MontType type) {
-    bss.push_back(MontVariable(name, 0, type));
+void MontConceiver::pushBSS(string name, MontType type, int memorySize) {
+    bss.push_back(MontVariable(name, 0, type, memorySize));
 }
 
 int MontConceiver::getValue(Mnp ptr, MontType* type) {
@@ -1039,6 +1119,7 @@ int MontConceiver::getValue(Mnp ptr, MontType* type) {
 
 bool MontConceiver::visitChild(MontNodePtr node, int id, bool asLvalue){
     bool f = visit(node->children[id], asLvalue);
-    if (DEBUG) std::cout << "ok conceived " << node->children[id]->kind << "-" << node->children[id]->expansion << endl;
+    if (DEBUG) 
+        if (f) std::cout << "ok conceived " << node->children[id]->kind << "-" << node->children[id]->expansion << endl;
     return f;
 }

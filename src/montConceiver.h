@@ -49,13 +49,15 @@ enum IntermediateType {
     IR_CALLV, // str, int 同上，但无返回值
     IR_RETV, // ret无返回值
     IR_GLOBADDR, // str
+    IR_SWAP // 交换栈顶两个元素
 };
 
 struct MontVariable {
     string name;
     int location;
     MontType type;
-    MontVariable(string n, int loc, MontType type) : name(n), location(loc), type(type) {}
+    int size; // 是四的倍数
+    MontVariable(string n, int loc, MontType type, int size) : name(n), location(loc), type(type), size(size) {}
     friend std::ostream& operator <<(std::ostream& out, MontVariable& variable);
 };
 
@@ -85,7 +87,7 @@ struct MontStackFrame {
     vector<MontVariable> identifiers;
     bool blocking;
     MontStackFrame(bool blocking=false): blocking(blocking) {identifiers = vector<MontVariable>();}
-    void push(string name, int loc, MontType type){identifiers.push_back(MontVariable(name, loc, type));}
+    void push(string name, int loc, MontType type, int size){identifiers.push_back(MontVariable(name, loc, type, size));}
     friend std::ostream& operator <<(std::ostream& out, MontStackFrame& frame);
 };
 
@@ -133,7 +135,7 @@ private:
     stack<int> loops;
     int currentFunction;
     void pushParameter(string name, MontType type, int index);
-    void pushVariable(string name, MontType type);
+    void pushVariable(string name, MontType type, int memorySize);
     void pushFrame(bool blocking);
     void popFrame();
     MontFunction& getCurrentFunction(){return functions[currentFunction];}
@@ -142,7 +144,7 @@ private:
     int getFunction(string name);
     bool checkGlobal(string name, bool checkfunction);
     void pushData(string name, MontType type, int value);
-    void pushBSS(string name, MontType type);
+    void pushBSS(string name, MontType type, int memorySize);
     MontType getType(MontNodePtr node);
     MontType getTypeFromValue(Token token);
     static void setNodeType(MontNodePtr node, MontType type) {node->datatype = type;}
@@ -150,6 +152,10 @@ private:
     static bool isVoid(MontNodePtr ptr){return ptr->datatype.isVoid();} 
     static bool isPointer(MontNodePtr ptr){return ptr->datatype.isPointer();}
     static bool isInt(MontNodePtr ptr){return ptr->datatype.isInt();}
+    static bool isArray(MontNodePtr ptr){return ptr->datatype.isArray();}
+    static bool isBroadptr(MontNodePtr ptr){return ptr->datatype.isBroadptr();}
+    static bool isBool(MontNodePtr ptr){return ptr->datatype.isBool();}
+    static bool isBroadint(MontNodePtr ptr){return ptr->datatype.isBool() || ptr->datatype.isInt(); }
     static int getValue(MontNodePtr ptr, MontType* type);
     bool parseType(MontType dest, MontType src);
     void pushLoop(int id){loops.push(id);}

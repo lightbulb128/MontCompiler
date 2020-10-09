@@ -327,6 +327,21 @@ bool MontNode::tryParseDeclaration(MontLexer& lexer) {
         ptr->expansion = NE_DECLARATION_INIT;
         if (!ptr->tryParse(lexer, TK_ASSIGN) || !ptr->tryParseExpression(lexer)) 
             PARSEFAIL("Declaration: Expect expression after assign mark.");
+    } else if (peek.tokenKind == TK_LBRACKET) { // type Identifier LB Value RB LB Value RB
+        ptr->expansion = NE_DECLARATION_ARRAY; int c = 3;
+        while (peek.tokenKind == TK_LBRACKET) { 
+            if (!ptr->tryParse(lexer, TK_LBRACKET) || !ptr->tryParseValue(lexer)
+                || !ptr->tryParse(lexer, TK_RBRACKET)) 
+                PARSEFAIL("Declaration: Expect array size indication.");
+            int size;
+            if (!isValueInteger(ptr->children[c], &size)) 
+                PARSEFAIL("Declaration: Array size not integer.");
+            if (size<=0)
+                PARSEFAIL("Declaration: Array size not positive.");
+            c+=3; 
+            ptr->memorySize *= size;
+            peek = lexer.peek();
+        }
     } else 
         ptr->expansion = NE_DECLARATION_SIMPLE;
     if (DEBUG) cout << "ok parsed declaration" << endl;
@@ -385,6 +400,19 @@ bool MontNode::tryParsePostfix(MontLexer& lexer) {
         if (!ptr->tryParsePrimary(lexer))
             PARSEFAIL("Postfix: Illegal primary syntax.");
     } 
+    Token peek = lexer.peek();
+    if (peek.tokenKind == TK_LBRACKET) {
+        while (peek.tokenKind == TK_LBRACKET) {
+            Mnp newptr = new MontNode(); newptr->kind = NK_POSTFIX;
+            newptr->expansion = NE_POSTFIX_ARRAY;
+            newptr->copyRC(*ptr);
+            newptr->addChildren(ptr); ptr = newptr;
+            if (!ptr->tryParse(lexer, TK_LBRACKET) || !ptr->tryParseExpression(lexer)
+                || !ptr->tryParse(lexer, TK_RBRACKET))
+                PARSEFAIL("Postfix: Expect array index indicator expression.");
+            peek = lexer.peek();
+        }
+    }
     if (DEBUG) cout << "ok parsed postfix" << endl;
     addChildren(ptr); return true;
 }
@@ -642,13 +670,31 @@ bool MontNode::tryParseFunction(MontLexer& lexer) {
 bool MontNode::tryParseGlobdecl(MontLexer& lexer) {
     if (DEBUG) cout << "try parse globdecl " << lexer.peek() << endl;
     Mnp ptr = new MontNode(lexer); ptr->kind = NK_GLOBDECL;
+    ptr->memorySize = 4;
     if (!ptr->tryParseType(lexer) || !ptr->tryParse(lexer, TK_IDENTIFIER))
         PARSEFAIL("Globdecl: Expect type and identifier.");
     Token peek = lexer.peek();
     if (peek.tokenKind == TK_ASSIGN) {
+        ptr->expansion = NE_GLOBDECL_INIT;
         if (!ptr->tryParse(lexer, TK_ASSIGN) || !ptr->tryParseValue(lexer))
             PARSEFAIL("Globdecl: Expect plain value.");
-    }
+    } else if (peek.tokenKind == TK_LBRACKET) {
+        ptr->expansion = NE_GLOBDECL_ARRAY;
+        // type Identifier LB Value RB LB Value RB
+        int c = 3;
+        while (peek.tokenKind == TK_LBRACKET) { 
+            if (!ptr->tryParse(lexer, TK_LBRACKET) || !ptr->tryParseValue(lexer)
+                || !ptr->tryParse(lexer, TK_RBRACKET)) 
+                PARSEFAIL("Globdecl: Expect array size indication.");
+            int size;
+            if (!isValueInteger(ptr->children[c], &size))
+                PARSEFAIL("Globdecl: Array size not integer.");
+            if (size<=0)
+                PARSEFAIL("Globdecl: Array size not positive.");
+            ptr->memorySize *= size;
+            peek = lexer.peek();
+        }
+    } else ptr->expansion = NE_GLOBDECL_SIMPLE;
     if (!ptr->tryParse(lexer, TK_SEMICOLON))
         PARSEFAIL("Globdecl: Expect semicolon.");
     if (DEBUG) cout << "ok parsed globdecl" << endl;
@@ -759,12 +805,16 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_CONDITIONAL_LEAF: out << "leaf"; break;
         case NE_DECLARATION_INIT: out << "init"; break;
         case NE_DECLARATION_SIMPLE: out << "simple"; break;
+        case NE_DECLARATION_ARRAY: out << "array"; break;
         case NE_EQUALITY_INNER: out << "inner"; break;
         case NE_EQUALITY_LEAF: out << "leaf"; break;
         case NE_FOR_EXPRESSION: out << "expression"; break;
         case NE_FOR_DECLARATION: out << "declaration"; break;
         case NE_FUNCTION_DEFINITION: out << "definition"; break;
         case NE_FUNCTION_DECLARATION: out << "declaration"; break;
+        case NE_GLOBDECL_ARRAY: out << "array"; break;
+        case NE_GLOBDECL_INIT: out << "init"; break;
+        case NE_GLOBDECL_SIMPLE: out << "simple"; break;
         case NE_IF_ELSE: out << "else"; break;
         case NE_IF_SIMPLE: out << "simple"; break;
         case NE_LAND_INNER: out << "inner"; break;
@@ -775,6 +825,7 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
         case NE_MULTIPLICATIVE_LEAF: out << "leaf"; break;
         case NE_POSTFIX_CALL: out << "call"; break;
         case NE_POSTFIX_PRIMARY: out << "primary"; break;
+        case NE_POSTFIX_ARRAY: out << "array"; break;
         case NE_PRIMARY_IDENTIFIER: out << "identifier"; break;
         case NE_PRIMARY_PAREN: out << "paren"; break;
         case NE_PRIMARY_VALUE: out << "value"; break;
@@ -815,7 +866,9 @@ void MontNode::output(string tab, bool lastchild, ostream& out) {
 ostream& operator <<(ostream& out, MontType& type) {
     if (type.lvalue) out << "LVALUE ";
     if (type.basic == DT_POINTER) {
-        out << "ptr[" << *type.pointer << "]"; return out;
+        out << "ptr{" << *type.pointer << "}"; return out;
+    } else if (type.basic == DT_ARRAY) {
+        out << "arr[" << type.arraylength << "]" << "{" << *type.pointer << "}"; return out; 
     } else {
         switch (type.basic) {
             case DT_BOOL: out << "bool"; return out; 
@@ -826,4 +879,15 @@ ostream& operator <<(ostream& out, MontType& type) {
         }
     }
     return out;
+}
+
+bool MontNode::isValueInteger(Mnp ptr, int* size) {
+    if (ptr->kind!=NK_VALUE) return false;
+    ptr=ptr->children[0];
+    MontTokenNode* tptr = (MontTokenNode*) ptr;
+    Token t = tptr->getToken();
+    if (t.tokenKind!=TK_INT_VALUE)
+        return false;
+    if (size) *size = t.value;
+    return true;
 }

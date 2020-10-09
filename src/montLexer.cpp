@@ -72,6 +72,8 @@ std::ostream& operator <<(std::ostream& stream, const Token& t){
         case TK_TRUE: stream << "True"; break;
         case TK_FALSE: stream << "False"; break;
         case TK_BOOL: stream << "Bool"; break;
+        case TK_LBRACKET: stream << "LBracket '['"; break;
+        case TK_RBRACKET: stream << "RBracket ']'"; break;
         default: stream << "Unknown token type"; break;
     }
     stream << "]";
@@ -144,6 +146,7 @@ bool MontLexer::isSpace(char c){
 void MontLexer::setStream(istream* input) {
     stream = input;
     currentRow = 1; currentColumn = 0; lastChar = ' ';
+    charBuffer = stack<char>();
 }
 
 void MontLexer::reset(){
@@ -164,6 +167,7 @@ void MontLexer::reset(){
 // If function transfer are run the first time after reset(),
 // the stream must have skipped all the spaces.
 MontLexer::TransferResult MontLexer::transfer(char c, char peek){
+    //cout << "c=" << c << " peek=" << peek << " " << "skiv=" << flagSymbol << flagKeyword << flagIdentifier << flagValue << endl;
     if (!flagSymbol && !flagKeyword && !flagIdentifier && !flagValue) {
         appendErrorInfo("Token: Unknown token."); return TR_ERROR;
     }
@@ -223,6 +227,10 @@ MontLexer::TransferResult MontLexer::transfer(char c, char peek){
                 currentToken = Token(TK_QUESTION); return TR_FINISHED; break;
             case ':':
                 currentToken = Token(TK_COLON); return TR_FINISHED; break;
+            case '[':
+                currentToken = Token(TK_LBRACKET); return TR_FINISHED; break;
+            case ']':
+                currentToken = Token(TK_RBRACKET); return TR_FINISHED; break;
             default:
                 flagSymbol = false;
         }
@@ -338,10 +346,10 @@ void MontLexer::killSpaces(){
     while (true) { // get rid of spaces
         if (stream->eof()) return;
         c = getChar();
-        if (c=='/' && stream->peek()=='/') { // process // comment
+        if (c=='/' && peekChar()=='/') { // process // comment
             while (c!='\n') c = getChar();
-        } else if (c=='/' && stream->peek()=='*') { // process /* */ comment
-            while (c!='*' || stream->peek()!='/') c=getChar();
+        } else if (c=='/' && peekChar()=='*') { // process /* */ comment
+            while (c!='*' || peekChar()!='/') c=getChar();
             c=getChar(); c=getChar();
         }
         if (!isSpace(c)) break;
@@ -350,16 +358,17 @@ void MontLexer::killSpaces(){
 }
 
 Token MontLexer::nextToken(){
+    char peek = peekChar();
     if (!buffer.empty()) {Token ret = buffer.top(); buffer.pop(); return ret;}
     reset(); killSpaces();
-    char c = getChar();
+    char c = getChar(); peek = peekChar();
     if (c==EOF){
         Token ret = Token(TK_EOF);
         ret.setRC(currentRow+1, currentColumn);
         return ret;
     }
     int cr = currentRow, cc = currentColumn;
-    char peek = stream->peek();
+    peek = peekChar();
     while (true) {
         TransferResult result = transfer(c, peek);
         switch (result) {
@@ -381,7 +390,7 @@ Token MontLexer::nextToken(){
                 Token ret = Token(TK_ERROR); ret.setRC(cr, cc);
                 return ret; break;
         }
-        c = getChar(); peek = stream->peek();
+        c = getChar(); peek = peekChar();
     }
 }
 

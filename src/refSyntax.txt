@@ -1,7 +1,9 @@
 program     :   (function|globdecl)* EOF
 function    :   type|Void Identifier LP parameters RP codeblock     FUNCTION_DEFINITION
             |   type|Void Identifier LP parameters RP Semicolon     FUNCTION_DECLARATION
-globdecl    :   type Identifier (Assign Value)? Semicolon                    
+globdecl    :   type Identifier (LB Value RB)+ Semicolon            GLOBDECL_ARRAY
+            |   type Identifier Assign Value Semicolon              GLOBDECL_INIT
+            |   type Identifier Semicolon                           GLOBDECL_SIMPLE
 parameters  :   (type Identifier (Comma type Identifier)*)?
 codeblock   :   LBrace (blockitem)* RBrace
 blockitem   :   statement                                           BLOCKITEM_STATEMENT
@@ -23,6 +25,7 @@ if          :   If LP expression RP statement                       IF_SIMPLE
             :   If LP expression RP statement Else statement        IF_ELSE
 declaration :   type Identifier                                     DECLARATION_SIMPLE
             |   type Identifier Assign expression                   DECLARATION_INIT
+            |   type Identifier (LB Value RB)+                      DECLARATION_ARRAY
 type        :   Integer | Char | Bool                               TYPE_BASIC
             |   type Asterisk                                       TYPE_POINTER
 exprlist    :   (expression (, expression)*)?
@@ -48,6 +51,7 @@ unary       :   postfix                                             UNARY_POSTFI
             |   LParen type RParen unary                            UNARY_CAST
 postfix     :   primary                                             POSTFIX_PRIMARY
             |   Identifier LParen exprlist RParen                   POSTFIX_CALL
+            |   postfix LBracket expression RBracket                POSTFIX_ARRAY
 primary     :   value                                               PRIMARY_VALUE
             |   LParen expression RParen                            PRIMARY_PAREN
             |   Identifier                                          PRIMARY_IDENTIFIER

@@ -13,7 +13,7 @@ using std::stack;
 const int   VALID_CHAR_RANGE  = 26;
 const int   VALID_CHAR_OFFSET = 97;
 // const char* VALID_SYMBOLS    = "~!%^&*()-=+[]{}\\|;:<>,./?";
-const char * const VALID_SYMBOLS = "(){};><=,-~!+*%/|&?:"; // quote should not be treated as a symbol
+const char * const VALID_SYMBOLS = "(){};><=,-~!+*%/|&?:[]"; // quote should not be treated as a symbol
 const int MAX_INT = 0x7fffffff;
 
 enum TokenKind {
@@ -36,6 +36,7 @@ enum TokenKind {
     TK_PLUS, TK_ASTERISK, TK_LSLASH, TK_PERCENT, 
     TK_LOR, TK_LAND, TK_OR, TK_AND, 
     TK_QUESTION, TK_COLON, 
+    TK_LBRACKET, TK_RBRACKET,
     // eof
     TK_EOF, 
     // error
@@ -90,6 +91,7 @@ private:
     std::istream* stream;
     //string errorInfo;
     stack<Token> buffer;
+    stack<char> charBuffer;
     int currentRow, currentColumn;
     char lastChar;
     enum TransferResult{
@@ -127,13 +129,21 @@ public:
         if (lastChar == '\n' || lastChar == EOF) {currentRow++; currentColumn=1;}
         else {currentColumn++;}
         // std::cout<<"getchar: "<<currentRow<<":"<<currentColumn<<std::endl;
-        lastChar = stream->get();
+        if (charBuffer.size()>0) {
+            lastChar = charBuffer.top();
+            charBuffer.pop();
+        } else lastChar = stream->get();
         return lastChar;
     }
+    char peekChar(){
+        if (charBuffer.size()>0) return charBuffer.top();
+        else return stream->peek();
+    }
     void putbackChar(char c){
+        char peek = peekChar();
         currentColumn--;
         lastChar = ' ';
-        stream->putback(c);
+        charBuffer.push(c);
     }
     int getCurrentRow(){
         if (!buffer.empty()) return buffer.top().row;

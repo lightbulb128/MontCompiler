@@ -6,6 +6,7 @@
 #include <iostream>
 #include "montLexer.h"
 #include "montLog.h"
+#include <assert.h>
 
 using std::vector;
 using std::string;
@@ -78,7 +79,11 @@ enum MontNodeExpansion {
     NE_RELATIONAL_INNER,
     NE_DECLARATION_SIMPLE,
     NE_DECLARATION_INIT,
-    NE_ASSIGNMENT_VALUE,      // 30
+    NE_DECLARATION_ARRAY,
+    NE_GLOBDECL_SIMPLE,
+    NE_GLOBDECL_INIT,
+    NE_GLOBDECL_ARRAY,
+    NE_ASSIGNMENT_VALUE,     
     NE_ASSIGNMENT_ASSIGN,
     NE_BLOCKITEM_STATEMENT,
     NE_BLOCKITEM_DECLARATION,
@@ -88,12 +93,13 @@ enum MontNodeExpansion {
     NE_CONDITIONAL_INNER,
     NE_FOR_EXPRESSION,
     NE_FOR_DECLARATION,
-    NE_WHILE_STANDARD,        // 40
+    NE_WHILE_STANDARD,        
     NE_WHILE_DO,
     NE_FUNCTION_DECLARATION,
     NE_FUNCTION_DEFINITION,
     NE_POSTFIX_PRIMARY,
     NE_POSTFIX_CALL,
+    NE_POSTFIX_ARRAY, 
     NE_TYPE_BASIC,
     NE_TYPE_POINTER
 };
@@ -103,19 +109,32 @@ enum MontBasicType {
     DT_INT,
     DT_CHAR,
     DT_BOOL,
-    DT_POINTER
+    DT_POINTER,
+    DT_ARRAY, 
 };
 
 struct MontType {
     MontBasicType basic;
     MontType* pointer;
     bool lvalue; 
-    MontType(MontBasicType basic) : basic(basic), pointer(nullptr), lvalue(false) {}
-    MontType(): basic(DT_VOID), pointer(nullptr), lvalue(false) {}
-    MontType(MontType* ptr): pointer(ptr), basic(DT_POINTER), lvalue(false) {}
+    int size;
+    int arraylength;
+    MontType(MontBasicType basic) : basic(basic), pointer(nullptr), lvalue(false) {
+        if (basic == DT_VOID) size = 0;
+        else size = 4;
+    }
+    MontType(): basic(DT_VOID), pointer(nullptr), lvalue(false) {size=0;}
+    MontType(MontType* ptr): pointer(ptr), lvalue(false) {
+        basic = DT_POINTER; size=4; arraylength = 0;
+    }
+    MontType(MontType* ptr, int length): basic(DT_ARRAY), pointer(ptr), lvalue(false), arraylength(length) {
+        size = ptr->size * length;
+    }
     MontType(const MontType& r) {
         basic = r.basic;
         lvalue = r.lvalue;
+        size = r.size;
+        arraylength = r.arraylength;
         if (r.pointer != nullptr) 
             pointer = new MontType(*r.pointer);
         else pointer = nullptr;
@@ -125,6 +144,8 @@ struct MontType {
     MontType& operator =(const MontType& r){
         basic = r.basic;
         lvalue = r.lvalue;
+        size = r.size;
+        arraylength = r.arraylength;
         if (r.pointer != nullptr) 
             pointer = new MontType(*r.pointer);
         else pointer = nullptr;
@@ -134,6 +155,8 @@ struct MontType {
     bool operator ==(const MontType& r){
         if (basic == DT_POINTER || r.basic == DT_POINTER) 
             return (basic == DT_POINTER) && (r.basic==DT_POINTER) && (*pointer == *r.pointer);
+        if (basic == DT_ARRAY || r.basic == DT_ARRAY) 
+            return (basic == DT_ARRAY) && (r.basic==DT_ARRAY) && (*pointer == *r.pointer) && (arraylength == r.arraylength);
         if (basic == DT_VOID && r.basic != DT_VOID) return false;
         if (basic != DT_VOID && r.basic == DT_VOID) return false;
         return true;
@@ -141,11 +164,13 @@ struct MontType {
     bool operator !=(const MontType& r){
         return !(*this==r);
     }
-    void setLvalue(bool l = true){lvalue=l;}
+    void setLvalue(bool l){lvalue=l;}
     bool isPointer(){return basic == DT_POINTER;}
     bool isVoid(){return basic == DT_VOID;}
     bool isBool(){return basic == DT_BOOL;}
-    bool isInt(){return basic == DT_INT;}
+    bool isInt(){return basic == DT_INT || basic == DT_CHAR;}
+    bool isArray(){return basic == DT_ARRAY;}
+    bool isBroadptr(){return basic == DT_ARRAY || basic == DT_POINTER; }
 };
 
 class MontNode {
@@ -157,11 +182,12 @@ protected:
     MontType datatype; // 在conceiver中得到它的值。
     // static string errorInfo;
     int row, column;
-    int memorySize; 
     // 用于生成栈帧，表示该树节点对应代码中所需要声明局部变量的大小（一定是4的倍数），
     // 例如 if () {A} else {B} 中 memorySize 应当是 A B 中所声明局部变量空间中的较大值。
+    int memorySize; 
+    static bool isValueInteger(MontNode* ptr, int* size);
 public:
-    void setLvalue(bool f = true){datatype.setLvalue(f);}
+    void setLvalue(bool f){datatype.setLvalue(f);}
     bool isLvalue(){return datatype.lvalue;}
     MontNode(MontLexer& lexer){
         children = vector<MontNodePtr>();kind = NK_UNDEFINED;expansion = NE_NONE;
