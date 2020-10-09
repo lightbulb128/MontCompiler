@@ -31,8 +31,12 @@ string MontIntermediate::toString(){
         case IR_ADD: return "ADD";
         case IR_BEQZ: return "BEQZ " + str;
         case IR_BNEZ: return "BNEZ " + str;
+        case IR_BOOL: return "BOOL";
         case IR_BR: return "BR " + str;
         case IR_BUILDFRAME: return "BUILDFRAME " + to_string(num);
+        case IR_CALL: return "CALL " + str + " " + to_string(num);
+        case IR_CALLV: return "CALLV " + str + " " + to_string(num);
+        case IR_COMMENT: return "# " + str;
         case IR_DIV: return "DIV";
         case IR_EQ: return "EQ";
         case IR_FRAMEADDR: return "FRAMEADDR " + to_string(num);
@@ -57,9 +61,6 @@ string MontIntermediate::toString(){
         case IR_RETV: return "RETV";
         case IR_STORE: return "STORE";
         case IR_SUB: return "SUB";
-        case IR_BOOL: return "BOOL";
-        case IR_CALL: return "CALL " + str + " " + to_string(num);
-        case IR_CALLV: return "CALLV " + str + " " + to_string(num);
         case IR_SWAP: return "SWAP";
         default: return "IRERROR";
     }
@@ -86,6 +87,7 @@ string MontIntermediate::toAssembly(){
         case IR_CALLV: return 
                 _L("call " + str) +
                 _L("addi sp, sp, " + to_string(num*4));
+        case IR_COMMENT: return _L("# " + str);
         case IR_DIV: return LW2 + _L("div t1, t1, t2") + BSP + SW1;
         case IR_EQ: return LW2 + 
                 _L("sub t1, t1, t2") + 
@@ -127,9 +129,16 @@ string MontIntermediate::toAssembly(){
                 _L("snez t1, t1") + BSP + SW1;
         case IR_NOT: return LW1 + _L("not t1,t1") + SW1;
         case IR_POP: return BSP;
-        case IR_PUSH: return 
-                _L("addi sp, sp, -4") + 
-                _L("li t1, " + to_string(num)) + SW1;
+        case IR_PUSH: {
+                string ret = _L("addi sp, sp, -4");
+                /*if (num<(1<<12)) ret += _L("ori t1, x0, " + to_string(num));
+                else {
+                    ret += _L("lui t1, " + to_string(num>>12));
+                    ret += _L("ori t1, x0, " + to_string(num&((1<<12)-1)));
+                }*/
+                ret += _L("li t1, " + to_string(num)) + SW1;
+                return ret;
+        }
         case IR_REM: return LW2 + _L("rem t1, t1, t2")+BSP+SW1;
         case IR_RET: return 
                 _L("lw a0, 0(sp)") +
@@ -223,6 +232,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                         add(IRSIM(IR_SUB));
                         add(IRINT(IR_PUSH, 4));
                         add(IRSIM(IR_DIV));
+                        node->datatype = MontType(DT_INT);
                     } else 
                         return appendErrorInfo("Additive: Substraction of operand types undefined.", NRC);
                 }
@@ -247,6 +257,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (!visitChild(node, 0, true)) return false;
                 if (!node->children[0]->isLvalue()) 
                     return appendErrorInfo("Assignment: Assign to rvalue.", NRC);
+                if (isArray(node->children[0]))
+                    return appendErrorInfo("Assignment: Assign to array.", NRC);
                 type = node->children[0]->datatype;
                 if (DEBUG) std::cout << "assignment " << node->children[2]->datatype << " to " << type << endl;
                 if (type != node->children[2]->datatype)
@@ -285,6 +297,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     return appendErrorInfo("Conditional: Void condition.", NRC);
                 if (isPointer(cond))
                     return appendErrorInfo("Conditional: Pointer condition.", NRC);
+                if (isArray(cond))
+                    return appendErrorInfo("Conditional: Array condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("CONDITIONAL_FALSE")));
                 if (!visitChild(node, 2, false)) return false;
                 add(IRSTR(IR_BR, getLabel("CONDITIONAL_END")));
@@ -316,11 +330,17 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (!parseType(type, node->children[3]->datatype))
                     return appendErrorInfo("Declaration: Failed to cast implicitly.",NRC);
                 if (!flag) return false;
+                getVariable(name.identifier, nullptr); 
+                add(IRSIM(IR_STORE));
+                add(IRSIM(IR_POP));
             } else if (node->expansion == NE_DECLARATION_SIMPLE) {
                 pushVariable(name.identifier, type, node->memorySize);
                 add(IRINT(IR_PUSH, 0));
+                getVariable(name.identifier, nullptr); 
+                add(IRSIM(IR_STORE));
+                add(IRSIM(IR_POP));
             }
-            else if (node->expansion == NE_DECLARATION_ARRAY) { // 产生数组大小那么多个默认值0
+            else if (node->expansion == NE_DECLARATION_ARRAY) { 
                 // type Identifier LB Value RB LB value RB
                 int dim = (node->children.size()-2)/3;
                 for (int i=dim-1;i>=0;i--) {
@@ -331,12 +351,18 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (DEBUG) std::cout << "declare array " << type << endl;
                 pushVariable(name.identifier, type, node->memorySize);
                 int cnt = node->memorySize/4;
-                for (int i=0;i<cnt;i++) 
-                    add(IRINT(IR_PUSH, 0));
+                getVariable(name.identifier, nullptr); 
+                MontIntermediate loadVar = irs[irs.size()-1]; // 当前最后一条指令是读取指针地址放在栈顶 FRAMEADDR
+                irs.pop_back(); // 为了以后多次使用这条指令，暂时先弹出它，反正已经备份在loadvar里面了
+                add(IRINT(IR_PUSH, 0)); // 先把默认值0放在栈中
+                for (int i=0;i<cnt;i++) {
+                    add(loadVar); // 加载数组位置
+                    add(IRINT(IR_PUSH, i*4)); // 当前元素的偏移量
+                    add(IRSIM(IR_ADD)); // 加载当前元素位置
+                    add(IRSIM(IR_STORE)); // 存储默认值0
+                }
+                add(IRSIM(IR_POP)); // 弹出默认值0
             } else return appendErrorInfo("Declaration: Undefined declaration syntax.", NRC);
-            getVariable(name.identifier, nullptr); 
-            add(IRSIM(IR_STORE));
-            add(IRSIM(IR_POP));
             //if (DEBUG) std::cout << "ok conceived declaration" << endl;
             return true;
         }
@@ -361,6 +387,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     return appendErrorInfo("Equality: Types do not match.", NRC);
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Equality: Equality with void.", NRC);
+                if (isArray(a) || isArray(b))
+                    return appendErrorInfo("Equality: Array in operation.", NRC);
                 else node->datatype = MontType(DT_BOOL); 
                 node->setLvalue(false);
                 return true;
@@ -395,6 +423,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     return appendErrorInfo("For: Void condition.", NRC);
                 if (isPointer(cond))
                     return appendErrorInfo("For: Pointer condition.", NRC);
+                if (isArray(cond))
+                    return appendErrorInfo("For: Array condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("LOOP_BREAK")));
             }
             pushFrame(false);
@@ -406,7 +436,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             popFrame();
             add(IRSTR(IR_BR, getLabel("LOOP_BEGIN")));
             add(IRSTR(IR_LABEL, getLabel("LOOP_BREAK")));
-            popFrame();
+            popFrame(); popLoop();
             return true;
             break;
         }
@@ -499,7 +529,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     MontNode::isValueInteger(node->children[nid], &arraylength);
                     type = MontType(new MontType(type), arraylength);
                 }
-                if (DEBUG) std::cout << "globdecl array " << type << endl;
+                if (DEBUG) std::cout << "globdecl array " << type << " size=" << type.size << endl;
                 int cnt = node->memorySize/4;
                 pushBSS(name, type, node->memorySize);
             } else 
@@ -516,6 +546,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     return appendErrorInfo("If: Void condition.", NRC);
                 if (isPointer(cond))
                     return appendErrorInfo("If: Pointer condition.", NRC);
+                if (isArray(cond))
+                    return appendErrorInfo("If: Array condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("IF_END")));
                 if (!visitChild(node, 4, false)) return false;
                 add(IRSTR(IR_LABEL, getLabel("IF_END")));
@@ -527,6 +559,8 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     return appendErrorInfo("If: Void condition.", NRC);
                 if (isPointer(cond))
                     return appendErrorInfo("If: Pointer condition.", NRC);
+                if (isArray(cond))
+                    return appendErrorInfo("If: Array condition.", NRC);
                 add(IRSTR(IR_BEQZ, getLabel("IF_ELSE")));
                 if (!visitChild(node, 4, false)) return false;
                 add(IRSTR(IR_BR, getLabel("IF_END")));
@@ -551,7 +585,9 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Logical and: Operation with void.", NRC);
                 if (isPointer(a) || isPointer(b))
-                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
+                    return appendErrorInfo("Logical and: Pointer in operation.", NRC);
+                if (isArray(a) || isArray(b))
+                    return appendErrorInfo("Logical and: Array in operation.", NRC);
                 else node->datatype = MontType(DT_BOOL);
                 node->setLvalue(false);
                 return true;
@@ -574,7 +610,9 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Logical or: Operation with void.", NRC);
                 if (isPointer(a) || isPointer(b))
-                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
+                    return appendErrorInfo("Logical or: Pointer in operation.", NRC);
+                if (isArray(a) || isArray(b))
+                    return appendErrorInfo("Logical or: Array in operation.", NRC);
                 else node->datatype = MontType(DT_BOOL);
                 node->setLvalue(false);
                 return true;
@@ -601,7 +639,9 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Multiplicative: Multiplicative with void.", NRC);
                 if (isPointer(a) || isPointer(b))
-                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
+                    return appendErrorInfo("Multiplicative: Pointer in operation.", NRC);
+                if (isArray(a) || isArray(b))
+                    return appendErrorInfo("Multiplicative: Array in operation.", NRC);
                 else node->datatype = MontType(DT_INT);
                 node->setLvalue(false);
                 return true;
@@ -642,7 +682,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 setNodeType(node, func.ret); node->setLvalue(false);
                 return true;
             } else if (node->expansion == NE_POSTFIX_ARRAY) { // postfix LB expr RB
-                if (!visitChild(node, 0, true)) return false;
+                if (!visitChild(node, 0, false)) return false;
                 //std::cout << node->children[0]->datatype;
                 if (!visitChild(node, 2, false)) return false;
                 if (!isBroadptr(node->children[0])) 
@@ -656,7 +696,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 setNodeType(node, *(node->children[0]->datatype.pointer));
                 add(IRSIM(IR_MUL));
                 add(IRSIM(IR_ADD));
-                if (!asLvalue) {
+                if (!asLvalue && !node->datatype.isArray()) {
                     add(IRSIM(IR_LOAD));
                     node->setLvalue(false);
                 } else node->setLvalue(true);
@@ -676,7 +716,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 flag = getVariable(name.identifier, &type); 
                 if (!flag) return appendErrorInfo("Primary: Undefined identifier: " + name.identifier + ".", NRC);
                 setNodeType(node, type);
-                if (!asLvalue) {
+                if (!asLvalue && !type.isArray()) {
                     add(IRSIM(IR_LOAD));
                     node->setLvalue(false);
                 } else {
@@ -727,7 +767,9 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                 if (isVoid(a) || isVoid(b)) 
                     return appendErrorInfo("Relational and: Relational with void.", NRC);
                 if (isPointer(a) || isPointer(b))
-                    return appendErrorInfo("Additive: Pointer in operation.", NRC);
+                    return appendErrorInfo("Relational: Pointer in operation.", NRC);
+                if (isArray(a) || isArray(b))
+                    return appendErrorInfo("Relational: Array in operation.", NRC);
                 else node->datatype = MontType(DT_BOOL);
                 node->setLvalue(false);
                 return true;
@@ -745,6 +787,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             if (DEBUG) std::cout << "conceiving statement " << CRC << endl; 
             switch (node->expansion) {
                 case NE_STATEMENT_EXPRESSION: { // expression Semicolon
+                    add(IRSTR(IR_COMMENT, "expression " + to_string(node->row) + ":" + to_string(node->column)));
                     flag = visitChild(node, 0, false);
                     if (!flag) return false;
                     if (node->children[0]->datatype != DT_VOID)
@@ -752,6 +795,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     break;
                 }
                 case NE_STATEMENT_RETURN: { // Return expression? Semicolon
+                    add(IRSTR(IR_COMMENT, "return " + to_string(node->row) + ":" + to_string(node->column)));
                     if (currentFunction == -1)
                         return appendErrorInfo("Statement: Return not in function scope.", NRC);
                     MontFunction& func = getCurrentFunction();
@@ -775,6 +819,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     break;
                 }
                 case NE_STATEMENT_CODEBLOCK: {
+                    add(IRSTR(IR_COMMENT, "codeblock " + to_string(node->row) + ":" + to_string(node->column)));
                     pushFrame(false);
                     flag = visitChild(node, 0, false);
                     popFrame();
@@ -782,6 +827,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     break;
                 }
                 case NE_STATEMENT_IF: {
+                    add(IRSTR(IR_COMMENT, "if " + to_string(node->row) + ":" + to_string(node->column)));
                     return visitChild(node, 0, false);
                     break;
                 }
@@ -790,12 +836,15 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     break;
                 }
                 case NE_STATEMENT_FOR: {
+                    add(IRSTR(IR_COMMENT, "for " + to_string(node->row) + ":" + to_string(node->column)));
                     return visitChild(node, 0, false);
                 }
                 case NE_STATEMENT_WHILE: {
+                    add(IRSTR(IR_COMMENT, "while-loop " + to_string(node->row) + ":" + to_string(node->column)));
                     return visitChild(node, 0, false);
                 }
                 case NE_STATEMENT_BREAK: {
+                    add(IRSTR(IR_COMMENT, "break " + to_string(node->row) + ":" + to_string(node->column)));
                     int labelId = getCurrentLoop();
                     if (labelId == -1) 
                         return appendErrorInfo("Statement: Break not in a loop.", NRC);
@@ -803,6 +852,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     return true;
                 }
                 case NE_STATEMENT_CONTINUE: {
+                    add(IRSTR(IR_COMMENT, "continue " + to_string(node->row) + ":" + to_string(node->column)));
                     int labelId = getCurrentLoop();
                     if (labelId == -1) 
                         return appendErrorInfo("Statement: Continue not in a loop.", NRC);
@@ -866,11 +916,11 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
                     } else if (op.tokenKind == TK_ASTERISK) {
                         if (!visitChild(node, 1, false)) return false;
                         if (isVoid(node->children[1])) return appendErrorInfo("Unary: Unary with void.", NRC);
-                        if (!isBroadptr(node->children[1]))
+                        if (!isPointer(node->children[1]))
                             return appendErrorInfo("Unary: Asterisk symbol followed by non-pointer.", NRC);
-                        if (!asLvalue) 
-                            add(IRSIM(IR_LOAD));
                         node->datatype = *(node->children[1]->datatype.pointer);
+                        if (!asLvalue && !isArray(node)) 
+                            add(IRSIM(IR_LOAD));
                         node->setLvalue(true);
                         return true;
                     } else
@@ -930,7 +980,7 @@ bool MontConceiver::visit(MontNodePtr node, bool asLvalue) {
             popFrame();
             add(IRSTR(IR_BR, getLabel("LOOP_BEGIN")));
             add(IRSTR(IR_LABEL, getLabel("LOOP_BREAK")));
-            popFrame();
+            popFrame(); popLoop();
             break;
         }
         default:{
@@ -986,7 +1036,9 @@ bool MontConceiver::getVariable(string name, MontType* type){
             if (f.identifiers[j].name == name) {
                 if (type!=nullptr) *type = f.identifiers[j].type;
                 int loc = f.identifiers[j].location;
-                add(IRINT(IR_FRAMEADDR, loc));
+                // 局部变量数组的起始位置应当是这一块栈空间最低的地址，也就是说更靠近栈顶
+                // 所以加载的地址应当是 location + size / 4 - 1
+                add(IRINT(IR_FRAMEADDR, loc + f.identifiers[j].size/4 - 1));
                 return true;
             }
         if (f.blocking) break;

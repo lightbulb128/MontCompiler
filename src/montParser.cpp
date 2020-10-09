@@ -691,7 +691,7 @@ bool MontNode::tryParseGlobdecl(MontLexer& lexer) {
                 PARSEFAIL("Globdecl: Array size not integer.");
             if (size<=0)
                 PARSEFAIL("Globdecl: Array size not positive.");
-            ptr->memorySize *= size;
+            ptr->memorySize *= size; c+=3;
             peek = lexer.peek();
         }
     } else ptr->expansion = NE_GLOBDECL_SIMPLE;

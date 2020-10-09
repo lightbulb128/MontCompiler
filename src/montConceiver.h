@@ -49,7 +49,8 @@ enum IntermediateType {
     IR_CALLV, // str, int 同上，但无返回值
     IR_RETV, // ret无返回值
     IR_GLOBADDR, // str
-    IR_SWAP // 交换栈顶两个元素
+    IR_SWAP, // 交换栈顶两个元素
+    IR_COMMENT
 };
 
 struct MontVariable {
