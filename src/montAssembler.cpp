@@ -2,8 +2,8 @@
 
 MontAssembler::MontAssembler(){}
 
-const bool allowComments = true;
-const bool assemblyComments = true;
+const bool allowComments = false;
+const bool assemblyComments = false;
 
 void MontAssembler::write(const string& str, int indent) {
     ostream& os = *stream; bool newline = true;
